@@ -166,9 +166,9 @@ void ABladeCharacter::SetRagdoll(bool bEnable)
 		GetMesh()->RefreshBoneTransforms();
 	}
 
-	for (auto Weapon : Weapons)
+	for (auto& WeaponSlot : WeaponSlots)
 	{
-		Weapon->SetSimulatePhysics(bEnable);
+		WeaponSlot.Weapon->SetSimulatePhysics(bEnable);
 	}
 }
 
@@ -186,14 +186,11 @@ void ABladeCharacter::SnapCapsuleToRagdoll()
 
 FName ABladeCharacter::GetWeaponSocketName(ABladeWeapon* Weapon)
 {
-	for (int i = 0; i < Weapons.Num(); i++)
+	for (int i = 0; i < WeaponSlots.Num(); i++)
 	{
-		if (Weapons[i] == Weapon)
+		if (WeaponSlots[i].Weapon == Weapon)
 		{
-			if (WeaponSetups.IsValidIndex(i))
-			{
-				return WeaponSetups[i].AttachSocketName;
-			}
+			return WeaponSlots[i].AttachSocketName;
 			break;
 		}
 	}
@@ -203,12 +200,6 @@ FName ABladeCharacter::GetWeaponSocketName(ABladeWeapon* Weapon)
 
 void ABladeCharacter::Destroyed()
 {
-	for (auto Weapon : Weapons)
-	{
-		Weapon->Destroy();
-	}
-
-	Weapons.Empty();
 }
 
 float SmoothTo(float Src, float Dst, float Val)
@@ -600,14 +591,14 @@ void ABladeCharacter::PostInitializeComponents()
 	//GetArrowComponent()->SetHiddenInGame(false);
 	MaxHealth = Health;
 	GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
-	for (const auto& Setup : WeaponSetups)
+	for (auto& WeaponSlot : WeaponSlots)
 	{
-		if (Setup.WeaponClass)
+		if (WeaponSlot.WeaponClass)
 		{
 			FActorSpawnParameters ActorSpawnParameters;
 			ActorSpawnParameters.Owner = this;
-			Weapons.Add(GetWorld()->SpawnActor<ABladeWeapon>(Setup.WeaponClass, ActorSpawnParameters));
-			Weapons.Last()->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Setup.AttachSocketName);
+			WeaponSlot.Weapon = GetWorld()->SpawnActor<ABladeWeapon>(WeaponSlot.WeaponClass, ActorSpawnParameters);
+			WeaponSlot.Weapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, WeaponSlot.AttachSocketName);
 		}
 	}
 }
@@ -661,6 +652,16 @@ void ABladeCharacter::PushActionCommand(const FActionCommand& Cmd)
 void ABladeCharacter::RemoveActionCommand(const FActionCommand& Cmd)
 {
 	CachedCommands.Remove(Cmd);
+}
+
+ABladeWeapon* ABladeCharacter::GetWeapon(int Index) const
+{
+	if (WeaponSlots.IsValidIndex(Index))
+	{
+		return WeaponSlots[Index].Weapon;
+	}
+
+	return nullptr;
 }
 
 void ABladeCharacter::Jump()
@@ -814,11 +815,11 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 {
 	if (auto AnimInst = GetAnimInstance())
 	{
-		ABladeWeapon* Weapon = Weapons[WeaponIndex];
+		ABladeWeapon* Weapon = WeaponSlots[WeaponIndex].Weapon;
 		if (Weapon)
 		{
 			const float TimeStep = 1.0 / 30;
-			FName AttachBoneName = WeaponSetups[WeaponIndex].AttachSocketName;
+			FName AttachBoneName = WeaponSlots[WeaponIndex].AttachSocketName;
 			auto BoneIndex = GetMesh()->GetBoneIndex(AttachBoneName);
 			FTransform SocketLocalTransform = FTransform::Identity;
 			if (BoneIndex == -1)

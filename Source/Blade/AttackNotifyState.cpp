@@ -9,12 +9,12 @@ void UAttackNotifyState::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequ
 {
 	if (const ABladeCharacter* Character = Cast<ABladeCharacter>(MeshComp->GetOwner()))
 	{
-		if(Character->Weapons.IsValidIndex(WeaponIndex))
+		if(Character->WeaponSlots.IsValidIndex(WeaponIndex))
 		{
-			Character->Weapons[WeaponIndex]->Damage = Damage;
-			Character->Weapons[WeaponIndex]->SetDamageType(DamageType);
-			Character->Weapons[WeaponIndex]->HitCameraShake = HitCameraShake;
-			Character->Weapons[WeaponIndex]->HitPlayRateCurve = HitPlayRateCurve;
+			Character->WeaponSlots[WeaponIndex].Weapon->Damage = Damage;
+			Character->WeaponSlots[WeaponIndex].Weapon->SetDamageType(DamageType);
+			Character->WeaponSlots[WeaponIndex].Weapon->HitCameraShake = HitCameraShake;
+			Character->WeaponSlots[WeaponIndex].Weapon->HitPlayRateCurve = HitPlayRateCurve;
 			Character->PredictAttackHit(Animation, EventReference.GetNotify()->GetTriggerTime(), EventReference.GetNotify()->GetEndTriggerTime(),WeaponIndex);
 		}
 	}
@@ -24,12 +24,12 @@ void UAttackNotifyState::NotifyEnd(USkeletalMeshComponent* MeshComp, UAnimSequen
 {
 	if (const ABladeCharacter* Character = Cast<ABladeCharacter>(MeshComp->GetOwner()))
 	{
-		if (Character->Weapons.IsValidIndex(WeaponIndex))
+		if (Character->WeaponSlots.IsValidIndex(WeaponIndex))
 		{
-			Character->Weapons[WeaponIndex]->Damage = 0;
-			Character->Weapons[WeaponIndex]->SetDamageType(nullptr);
-			Character->Weapons[WeaponIndex]->HitCameraShake = nullptr;
-			Character->Weapons[WeaponIndex]->HitPlayRateCurve = nullptr;
+			Character->WeaponSlots[WeaponIndex].Weapon->Damage = 0;
+			Character->WeaponSlots[WeaponIndex].Weapon->SetDamageType(nullptr);
+			Character->WeaponSlots[WeaponIndex].Weapon->HitCameraShake = nullptr;
+			Character->WeaponSlots[WeaponIndex].Weapon->HitPlayRateCurve = nullptr;
 		}
 	}
 }

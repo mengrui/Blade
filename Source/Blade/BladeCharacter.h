@@ -25,7 +25,7 @@ enum ECharacterState
 };
 
 USTRUCT(BlueprintType)
-struct FWeaponSetup 
+struct FWeaponSlot 
 {
 	GENERATED_BODY()
 
@@ -35,6 +35,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FName				   AttachSocketName;
+
+	TObjectPtr<ABladeWeapon>	Weapon;
 };
 
 UCLASS(BlueprintType, config=Game)
@@ -142,10 +144,10 @@ public:
 	float HitAfterTime = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	TArray <FWeaponSetup>			WeaponSetups;
+	TArray <FWeaponSlot>			WeaponSlots;
 
-	UPROPERTY(BlueprintReadWrite, Transient)
-	TArray<TObjectPtr<ABladeWeapon>>		Weapons;
+	UFUNCTION(BlueprintPure)
+	ABladeWeapon* GetWeapon(int Index) const;
 
 	virtual void Jump() override;
 	void Landed(const FHitResult& Hit) override;
