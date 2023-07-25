@@ -21,7 +21,7 @@ public:
 	bool bDebugDraw = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TrackCollisionComponent)
-	int  NumSection = 5;
+	int  SectionLength = 20;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TrackCollisionComponent)
 	TArray<TEnumAsByte<EObjectTypeQuery> >  TraceChannels;

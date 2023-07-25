@@ -78,8 +78,7 @@ ABladeCharacter::ABladeCharacter(const FObjectInitializer& ObjectInitializer)
 
 void ABladeCharacter::InitializePhysicsAnimation()
 {
-	GetMesh()->SetConstraintProfileForAll(TEXT("RagdollNoDrives"));
-	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetMesh()->SetConstraintProfileForAll(TEXT("None"));
 	FPhysicsControlSettings  ControlSettings;
 	PhysicsControlComponent->CreateControlsAndBodyModifiersFromLimbBones(
 		AllWorldSpaceControls,
@@ -92,11 +91,11 @@ void ABladeCharacter::InitializePhysicsAnimation()
 		PhysicsControlLimbSetupDatas,
 		WorldSpaceControlData,
 		ControlSettings,
-		true,
+		false,
 		ParentSpaceControlData,
 		ControlSettings,
 		false,
-		EPhysicsMovementType::Simulated,
+		EPhysicsMovementType::Kinematic,
 		0
 	);
 }
@@ -105,7 +104,7 @@ void ABladeCharacter::EnablePhysicsAnimation(bool bTrue)
 {
 	if (bTrue)
 	{
-		GetMesh()->SetConstraintProfileForAll(TEXT("RagdollNoDrives"));
+		GetMesh()->SetConstraintProfileForAll(TEXT("HingesOnly"));
 		GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		PhysicsControlComponent->SetBodyModifiersMovementType(AllBodyModifiers.Names, EPhysicsMovementType::Simulated);
 		PhysicsControlComponent->SetControlsEnabled(AllWorldSpaceControls.Names, true);
@@ -130,45 +129,75 @@ bool ABladeCharacter::IsRagdoll() const
 
 void ABladeCharacter::SetRagdoll(bool bEnable)
 {	
-	auto AnimInst = GetAnimInstance();
-	if (!AnimInst) return;
-	
-	if (bEnable)
+	bRagdoll = bEnable;
+	if (bRagdoll)
 	{
 		GetMesh()->SetConstraintProfileForAll(TEXT("None"), true);
-		bRagdoll = true;
-		//GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 
-		PhysicsControlComponent->SetControlsEnabled(AllWorldSpaceControls.Names, false);
-		PhysicsControlComponent->SetControlsEnabled(AllParentSpaceControls.Names, true);
-		PhysicsControlComponent->SetBodyModifiersGravityMultiplier(AllBodyModifiers.Names, 1);
-		//PhysicsControlComponent->SetBodyModifiersMovementType(AllBodyModifiers.Names, EPhysicsMovementType::Simulated);
+		if (!PhysicsControlComponent->GetAllControlNames().IsEmpty())
+		{
+			PhysicsControlComponent->SetControlsEnabled(AllWorldSpaceControls.Names, false);
+			PhysicsControlComponent->SetControlsEnabled(AllParentSpaceControls.Names, true);
+			PhysicsControlComponent->SetBodyModifiersGravityMultiplier(AllBodyModifiers.Names, 1);
+			PhysicsControlComponent->SetBodyModifiersMovementType(AllBodyModifiers.Names, EPhysicsMovementType::Simulated);
+		}
+		else
+		{
+			GetMesh()->SetSimulatePhysics(true);
+		}
 
 		GetMesh()->SetAllMassScale(MassScale);
+		for (auto& Setup : WeaponSlots)
+		{
+			if (Setup.Weapon)
+				Setup.Weapon->SetSimulatePhysics(bRagdoll);
+		}
+
+		if (auto AnimInst = GetAnimInstance())
+		{
+			GetWorldTimerManager().SetTimerForNextTick([AnimInst]()
+				{
+					AnimInst->bRagdoll = true;
+				});
+		}
 	}
 	else
 	{
-		FTransform PelvisTransform = GetMesh()->GetBoneTransform(GetMesh()->GetBoneIndex(AnimInst->PelvisBone));
-		SnapCapsuleToRagdoll();
-		bRagdoll = false;
-		AnimInst->SavePoseSnapshot(TEXT("Ragdoll"));
-		GetMesh()->SetConstraintProfileForAll(TEXT("RagdollNoDrives"));
-		PhysicsControlComponent->SetControlsEnabled(AllWorldSpaceControls.Names, true);
-		PhysicsControlComponent->SetControlsEnabled(AllParentSpaceControls.Names, false);
-		PhysicsControlComponent->SetBodyModifiersGravityMultiplier(AllBodyModifiers.Names, 0);
-		//PhysicsControlComponent->SetBodyModifiersMovementType(AllBodyModifiers.Names, EPhysicsMovementType::Simulated);
+		if (auto AnimInst = GetAnimInstance())
+		{
+			AnimInst->SavePoseSnapshot(TEXT("Ragdoll"));
+			FTransform PelvisTransform = GetMesh()->GetBoneTransform(GetMesh()->GetBoneIndex(AnimInst->PelvisBone));
+			FHitResult Hit;
+			const auto ActorRot = FRotationMatrix::MakeFromX(PelvisTransform.GetUnitAxis(EAxis::X).GetSafeNormal2D() * (GetMesh()->GetBoneAxis(AnimInst->PelvisBone, EAxis::Y).Z > 0 ? -1 : 1)).Rotator();
+			SetActorLocation(PelvisTransform.GetLocation() + FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight()));
+			GetCharacterMovement()->SafeMoveUpdatedComponent(PelvisTransform.GetLocation() - GetActorLocation(), ActorRot, true, Hit);
 
-		//GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-		GetMesh()->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
-		GetMesh()->SetRelativeLocationAndRotation(GetBaseTranslationOffset(), GetBaseRotationOffset(), false, nullptr, ETeleportType::TeleportPhysics);
-		AnimInst->PelvisTransform = PelvisTransform.GetRelativeTransform(GetMesh()->GetComponentToWorld());
-		GetMesh()->TickAnimation(0, false);
-		GetMesh()->RefreshBoneTransforms();
-	}
+			if (!PhysicsControlComponent->GetAllControlNames().IsEmpty())
+			{
+				PhysicsControlComponent->SetControlsEnabled(AllWorldSpaceControls.Names, false);
+				PhysicsControlComponent->SetControlsEnabled(AllParentSpaceControls.Names, false);
+				PhysicsControlComponent->SetBodyModifiersGravityMultiplier(AllBodyModifiers.Names, 1);
+				PhysicsControlComponent->SetBodyModifiersMovementType(AllBodyModifiers.Names, EPhysicsMovementType::Kinematic);
+			}
+			else
+			{
+				GetMesh()->SetSimulatePhysics(false);
+			}
 
-	for (auto& WeaponSlot : WeaponSlots)
-	{
-		WeaponSlot.Weapon->SetSimulatePhysics(bEnable);
+			GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+			//GetCapsuleComponent()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Block);
+			GetMesh()->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
+			GetMesh()->SetRelativeLocationAndRotation(GetBaseTranslationOffset(), GetBaseRotationOffset(), false, nullptr, ETeleportType::TeleportPhysics);
+			AnimInst->PelvisTransform = PelvisTransform.GetRelativeTransform(GetMesh()->GetComponentToWorld());
+			GetMesh()->TickPose(0, false);
+			GetMesh()->RefreshBoneTransforms();
+			for (auto& Setup : WeaponSlots)
+			{
+				if (Setup.Weapon)
+					Setup.Weapon->SetSimulatePhysics(false);
+			}
+		}
 	}
 }
 
@@ -483,7 +512,7 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 		{
 			GetCharacterMovement()->AddImpulse(-CauserDir * Force, true);
 		}
-		;
+		
 		//UKismetSystemLibrary::PrintString(this, FString::Printf(TEXT("Play HitAnimation %s"), *HitAnim->GetName()));
 	}
 	else
@@ -504,8 +533,15 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 		}
 		else if (bUsePhysicsAnimation)
 		{
-			OnPhysicsHit(-ShotFromDirection * Force, HitLocation, BoneName);
-			//GetMesh()->AddVelocityChangeImpulseAtLocation(-ShotFromDirection * Force, HitLocation, BoneName);
+			EnablePhysicsAnimation(true);
+			FTimerHandle HitTimerHandle;
+			GetWorldTimerManager().SetTimer(HitTimerHandle, FSimpleDelegate::CreateWeakLambda(this,
+				[this, Impulse = -ShotFromDirection * Force, HitLocation, BoneName]()
+				{
+					GetMesh()->AddImpulseAtLocation(Impulse, HitLocation, BoneName);
+				}), 0.1, false);
+
+			GetWorldTimerManager().SetTimer(StopPhysAnimTimerHandle, FSimpleDelegate::CreateWeakLambda(this, [this]() { EnablePhysicsAnimation(false); }), 0.5, false);
 		}
 	}
 
@@ -698,13 +734,9 @@ void ABladeCharacter::PawnClientRestart()
 	Super::PawnClientRestart();
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
-		// 从与我们的玩家控制器相关的本地玩家获取Enhanced Input本地玩家子系统。
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
 		{
-			// PawnClientRestart在Actor的生命周期中可以运行多次，因此首先要清除任何残留的映射。
 			Subsystem->ClearAllMappings();
-
-			// 添加每个映射上下文及其优先级值。较高的值优先于较低的值。
 			Subsystem->AddMappingContext(InputMappingContext, 1);
 		}
 	}

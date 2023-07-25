@@ -15,11 +15,6 @@ UTrackCollisionComponent::UTrackCollisionComponent(const FObjectInitializer& Obj
 
 void UTrackCollisionComponent::StartTrace()
 {
-	if (NumSection == 0)
-	{
-		return;
-	}
-
 	bTrace = true;
 	LastTransform = GetComponentTransform();
 }
@@ -40,6 +35,7 @@ void UTrackCollisionComponent::OnUpdateTransform(EUpdateTransformFlags UpdateTra
 	TArray<AActor*> IgnoreActors;
 	IgnoreActors.Add(GetOwner()->GetOwner());
 	const FVector ScaledExtent = GetScaledBoxExtent();
+	int NumSection = ScaledExtent.X * 2 / SectionLength;
 	const FVector Extent = GetUnscaledBoxExtent();
 	const FVector StepVec = FVector(Extent.X*2, 0, 0) / static_cast<float>(NumSection);
 	for (int32 i = 0; i < NumSection; i++)
