@@ -108,7 +108,7 @@ bool ABladeWeapon::SweepTraceCharacter(TArray<FHitResult>& OutHits, const FTrans
 		TArray<UPrimitiveComponent*> IgnoreComponents;
 		const FVector ScaledExtent = CollisionComponent->GetScaledBoxExtent();
 		const FVector Extent = CollisionComponent->GetUnscaledBoxExtent();
-		const int NumSection = CollisionComponent->NumSection;
+		const int NumSection = ScaledExtent.X * 2 / CollisionComponent->SectionLength;
 		const FVector StepVec = FVector(Extent.X * 2, 0, 0) / static_cast<float>(NumSection);
 		for (int32 i = 0; i < NumSection; i++)
 		{

@@ -210,6 +210,12 @@ public:
 	float Attack(int Index);
 
 	UFUNCTION(BlueprintCallable)
+	void LeftAttack();
+
+	UFUNCTION(BlueprintCallable)
+	void RightAttack();
+
+	UFUNCTION(BlueprintCallable)
 	void Block(const FInputActionValue& ActionValue);
 
 	UFUNCTION(BlueprintCallable)
@@ -347,6 +353,8 @@ protected:
 	FOnMontageEnded						  MontageEndedDelegate;
 
 	void SnapCapsuleToRagdoll();
+
+	FTimerHandle StopPhysAnimTimerHandle;
 
 public:
 	/** Returns CameraBoom subobject **/
