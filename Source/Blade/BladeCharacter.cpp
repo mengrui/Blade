@@ -804,9 +804,11 @@ float ABladeCharacter::PlayAction(UAnimSequenceBase* AnimSeq)
 		else
 			AnimMontage = AnimInst->PlaySlotAnimationAsDynamicMontage(AnimSeq, DefaultSlot);
 		
-		//AnimInst->GetActiveInstanceForMontage(AnimMontage)->PushDisableRootMotion();
-		GetMesh()->TickAnimation(0.01f, false);
-		GetMesh()->RefreshBoneTransforms();
+		if (auto MontageInst = AnimInst->GetActiveInstanceForMontage(AnimMontage))
+		{
+			MontageInst->Advance(0.001, nullptr, false);
+			AnimInst->TriggerAnimNotifies(0.001);
+		}
 
 		bMoveAble = false;
 		return GetNextComboTime(AnimSeq);
@@ -1053,6 +1055,19 @@ float ABladeCharacter::Attack(int InputIndex)
 	}
 
 	return 0;
+}
+
+void ABladeCharacter::LeftAttack()
+{
+	if (auto AnimInst = GetAnimInstance())
+	{
+		int AttackIndex = InputVector.IsZero()? 0 : FRotator::ClampAxis(InputVector.ToOrientationRotator().Yaw + 45) / 90 + 1;
+		Attack(AttackIndex);
+	}
+}
+
+void ABladeCharacter::RightAttack()
+{
 }
 
 void ABladeCharacter::Block(const FInputActionValue& ActionValue)

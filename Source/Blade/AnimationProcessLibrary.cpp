@@ -2,6 +2,9 @@
 
 
 #include "AnimationProcessLibrary.h"
+#include "BladeUtility.h"
+#if WITH_EDITOR
+#include "AnimationBlueprintLibrary.h"
 
 void UAnimationProcessLibrary::CopyBoneTransform(UAnimSequence* Animation, const FName& SourceBone, const FName& DestBone)
 {
@@ -72,3 +75,40 @@ void UAnimationProcessLibrary::CopyBoneTransform(UAnimSequence* Animation, const
 	Controller.AddBoneTrack(DestBone);
 	Controller.SetBoneTrackKeys(DestBone, DestTrack.PosKeys, DestTrack.RotKeys, DestTrack.ScaleKeys);
 }
+
+static void GenBoneSyncMarker(UAnimSequence* Animation, const int32 BoneIndex, float FootHeightThreshold, const FName& MarkerName, const FName& SyncMarkerNotifyTrackName)
+{
+	float SequenceLen = Animation->GetPlayLength();
+	const float Step = 1.0 / 60;
+	FVector LastFootLoc = GetAnimationBoneTransform(Animation, BoneIndex, 0).GetLocation();
+	bool bLastOnGround = LastFootLoc.Z < FootHeightThreshold;
+	for (float CurTime = Step; CurTime <= SequenceLen; CurTime += Step)
+	{
+		FVector FootLoc = GetAnimationBoneTransform(Animation, BoneIndex, CurTime).GetLocation();
+		//float Speed = (FootLoc - LastFootLoc).Size() / Step;
+		bool bOnGround = FootLoc.Z < (bLastOnGround ? 10 : FootHeightThreshold);
+		if (!bLastOnGround && bOnGround)
+		{
+			UAnimationBlueprintLibrary::AddAnimationSyncMarker(Animation, MarkerName, CurTime, SyncMarkerNotifyTrackName);
+		}
+
+		//LastFootLoc = LastFootLoc;
+		bLastOnGround = bOnGround;
+	}
+}
+
+void UAnimationProcessLibrary::AddSyncMarker(UAnimSequence* Animation, const FName& SyncMarkerNotifyTrackName,
+	const FName& LeftBoneName, const FName& RightBoneName,
+	const FName& LeftMarkerName, const FName& RightMarkerName, float FootHeightThreshold)
+{
+	UAnimationBlueprintLibrary::RemoveAnimationNotifyTrack(Animation, SyncMarkerNotifyTrackName);
+	UAnimationBlueprintLibrary::AddAnimationNotifyTrack(Animation, SyncMarkerNotifyTrackName);
+	USkeleton* Skeleton = Animation->GetSkeleton();
+	const auto& RefSkeleton = Skeleton->GetReferenceSkeleton();
+
+	const int32 LeftBoneIndex = RefSkeleton.FindBoneIndex(LeftBoneName);
+	const int32 RightBoneIndex = RefSkeleton.FindBoneIndex(RightBoneName);
+	GenBoneSyncMarker(Animation, LeftBoneIndex, FootHeightThreshold, LeftMarkerName, SyncMarkerNotifyTrackName);
+	GenBoneSyncMarker(Animation, RightBoneIndex, FootHeightThreshold, RightMarkerName, SyncMarkerNotifyTrackName);
+}
+#endif

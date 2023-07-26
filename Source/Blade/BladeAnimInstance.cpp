@@ -45,13 +45,13 @@ void UBladeAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	Speed = Velocity.Size2D();
 	const UCharacterMovementComponent* MovementComponent = Cast<UCharacterMovementComponent>(Character->GetMovementComponent());
 	MovementMode = MovementComponent->MovementMode;
-	Strafe = MovementMode == EMovementMode::MOVE_None? FVector2D::ZeroVector : FVector2D(Character->GetTransform().InverseTransformVectorNoScale(Velocity) ) / MovementComponent->GetMaxSpeed();
 	Acceleration = MovementComponent->GetCurrentAcceleration();
-	bInputMove = !Acceleration.IsZero();
 	FVector AccelDir = Acceleration.GetSafeNormal2D();
 	FVector LocalAccelVector = ActorTransform.InverseTransformVector(AccelDir);
+	Strafe = MovementMode == EMovementMode::MOVE_None ? FVector2D::ZeroVector : FVector2D(LocalAccelVector);
 	IsMoveForward = (LocalAccelVector | FVector(1, 0, 0)) > 0.99f;
 	IsPlayingRootMotion = GetRootMotionMontageInstance() && !GetRootMotionMontageInstance()->IsRootMotionDisabled();
+	bInputMove = !Acceleration.IsZero() && !IsPlayingRootMotion;
 	if (SmoothTeleportTime > 0)
 	{
 		SmoothTeleportAlpha -= DeltaSeconds / SmoothTeleportTime;
