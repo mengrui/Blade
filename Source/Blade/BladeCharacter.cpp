@@ -404,7 +404,7 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 	auto AnimInst = GetAnimInstance();
 	if (!AnimInst || !bHitAble) return;
 
-	FVector ForceFromDir = HitNormal.IsZero() ? ShotFromDirection.GetSafeNormal() : HitNormal;
+	FVector ForceFromDir = ShotFromDirection.GetSafeNormal();
 	HitNormal = FVector::ZeroVector;
 	const FVector CauserDir = (DamageCauser->GetOwner()->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
 	EHitAnimType AnimType = EHitAnimType::StandLight;
@@ -447,7 +447,7 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 
 	const auto& RefSkeleton = AnimInst->CurrentSkeleton->GetReferenceSkeleton();
 	const int HitBoneIndex = RefSkeleton.FindBoneIndex(BoneName);
-	const FVector LocalDir = GetTransform().InverseTransformVector(ForceFromDir);
+	const FVector HitDirInMeshSpace = GetMesh()->GetComponentTransform().InverseTransformVector(ForceFromDir);
 	float MinCost = FLT_MAX;
 	UAnimSequenceBase* HitAnim = nullptr;
 	FVector HitAnimDirection = FVector::Zero();
@@ -462,9 +462,9 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 					const int Depth = RefSkeleton.GetDepthBetweenBones(HitBoneIndex, RefSkeleton.FindBoneIndex(HitData->BoneName));
 					if (Depth >= 0)
 					{
-						FVector AnimHitVec = HitVectors[HitData->Direction].GetUnsafeNormal();
+						FVector AnimHitVec = HitData->Direction.GetSafeNormal();
 						float Cost = 0;
-						Cost += 1 - (AnimHitVec | LocalDir);
+						Cost += 1 - (AnimHitVec | HitDirInMeshSpace);
 						Cost += Depth;
 						if (Cost < MinCost)
 						{
@@ -479,7 +479,7 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 	}
 	else
 	{
-		float Yaw = LocalDir.Rotation().Yaw;
+		float Yaw = HitDirInMeshSpace.Rotation().Yaw;
 		Yaw += 45;
 		if (Yaw < 0)
 		{
@@ -497,7 +497,7 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 	{
 		if (bSnapToCauser)
 		{
-			const auto DeltaRot = FQuat::FindBetween(HitAnimDirection, LocalDir);
+			const auto DeltaRot = FQuat::FindBetween(HitAnimDirection, HitDirInMeshSpace);
 			SmoothTeleport(GetActorLocation(), (DeltaRot * GetActorQuat()).Rotator());
 		}
 
