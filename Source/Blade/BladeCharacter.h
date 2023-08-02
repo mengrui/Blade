@@ -259,6 +259,9 @@ public:
 	UFUNCTION(BlueprintCallable)
 	FVector GetInputVector() const;
 
+	UFUNCTION(BlueprintImplementableEvent)
+	FVector GetInputMove() const;
+
 	UFUNCTION(BlueprintCallable)
 	bool IsInState(ECharacterState State) const;
 
@@ -311,8 +314,6 @@ protected:
 	TMap<FName, FPhysicsControlNames>		LimbBodyModifiers;
 
 protected:
-	FVector InputVector;
-
 	UFUNCTION(BlueprintCallable)
 	void Move(const FInputActionValue& Value);
 

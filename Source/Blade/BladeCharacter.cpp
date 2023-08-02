@@ -98,22 +98,28 @@ void ABladeCharacter::InitializePhysicsAnimation()
 		EPhysicsMovementType::Kinematic,
 		0
 	);
+
+	EnablePhysicsAnimation(true);
 }
 
 void ABladeCharacter::EnablePhysicsAnimation(bool bTrue)
 {
 	if (bTrue)
 	{
-		GetMesh()->SetConstraintProfileForAll(TEXT("HingesOnly"));
 		GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		PhysicsControlComponent->SetBodyModifiersMovementType(AllBodyModifiers.Names, EPhysicsMovementType::Simulated);
+		TArray<FName> FootBoneNames;
+		for (const auto& val : AllBodyModifiers.Names)
+			if (val.ToString().Contains(TEXT("foot")) || val.ToString().Contains(TEXT("hand_r")))
+				FootBoneNames.Add(val);
+
+		PhysicsControlComponent->SetBodyModifiersMovementType(FootBoneNames, EPhysicsMovementType::Kinematic);
 		PhysicsControlComponent->SetControlsEnabled(AllWorldSpaceControls.Names, true);
 		PhysicsControlComponent->SetControlsEnabled(AllParentSpaceControls.Names, false);
 		PhysicsControlComponent->SetBodyModifiersGravityMultiplier(AllBodyModifiers.Names, 0);
 	}
 	else
 	{
-		GetMesh()->SetConstraintProfileForAll(TEXT("None"), true);
 		GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		PhysicsControlComponent->SetControlsEnabled(AllWorldSpaceControls.Names, false);
 		PhysicsControlComponent->SetControlsEnabled(AllParentSpaceControls.Names, false);
@@ -132,13 +138,12 @@ void ABladeCharacter::SetRagdoll(bool bEnable)
 	bRagdoll = bEnable;
 	if (bRagdoll)
 	{
-		GetMesh()->SetConstraintProfileForAll(TEXT("None"), true);
 		GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 
 		if (!PhysicsControlComponent->GetAllControlNames().IsEmpty())
 		{
 			PhysicsControlComponent->SetControlsEnabled(AllWorldSpaceControls.Names, false);
-			PhysicsControlComponent->SetControlsEnabled(AllParentSpaceControls.Names, true);
+			PhysicsControlComponent->SetControlsEnabled(AllParentSpaceControls.Names, false);
 			PhysicsControlComponent->SetBodyModifiersGravityMultiplier(AllBodyModifiers.Names, 1);
 			PhysicsControlComponent->SetBodyModifiersMovementType(AllBodyModifiers.Names, EPhysicsMovementType::Simulated);
 		}
@@ -347,7 +352,7 @@ FVector ABladeCharacter::GetInputVector() const
 		Rot.Yaw = Controller->GetControlRotation().Yaw;
 	}
 
-	return FTransform(Rot).TransformVector(InputVector.GetSafeNormal2D());
+	return FTransform(Rot).TransformVector(GetInputMove().GetSafeNormal2D());
 }
 
 bool ABladeCharacter::IsInState(ECharacterState State) const
@@ -439,11 +444,6 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 	{
 		SetHealth(Health - Damage);
 	}
-	const bool bSnapToCauser = AnimType == EHitAnimType::StandHeavy || AnimType == EHitAnimType::Float || AnimType == EHitAnimType::Knock;
-	if (bSnapToCauser)
-	{
-		ForceFromDir = CauserDir;
-	}
 
 	const auto& RefSkeleton = AnimInst->CurrentSkeleton->GetReferenceSkeleton();
 	const int HitBoneIndex = RefSkeleton.FindBoneIndex(BoneName);
@@ -495,12 +495,6 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 
 	if (HitAnim)
 	{
-		if (bSnapToCauser)
-		{
-			const auto DeltaRot = FQuat::FindBetween(HitAnimDirection, HitDirInMeshSpace);
-			SmoothTeleport(GetActorLocation(), (DeltaRot * GetActorQuat()).Rotator());
-		}
-
 		bMoveAble = false;
 		PlayAction(HitAnim);
 		GetCharacterMovement()->Velocity = FVector::ZeroVector;
@@ -533,7 +527,9 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 		}
 		else if (bUsePhysicsAnimation)
 		{
-			EnablePhysicsAnimation(true);
+			if(GetMesh()->IsSimulatingPhysics(BoneName))
+				GetMesh()->AddImpulseAtLocation(ShotFromDirection * Force, HitLocation, BoneName);
+		/*	EnablePhysicsAnimation(true);
 			FTimerHandle HitTimerHandle;
 			GetWorldTimerManager().SetTimer(HitTimerHandle, FSimpleDelegate::CreateWeakLambda(this,
 				[this, Impulse = -ShotFromDirection * Force, HitLocation, BoneName]()
@@ -541,7 +537,7 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 					GetMesh()->AddImpulseAtLocation(Impulse, HitLocation, BoneName);
 				}), 0.1, false);
 
-			GetWorldTimerManager().SetTimer(StopPhysAnimTimerHandle, FSimpleDelegate::CreateWeakLambda(this, [this]() { EnablePhysicsAnimation(false); }), 0.5, false);
+			GetWorldTimerManager().SetTimer(StopPhysAnimTimerHandle, FSimpleDelegate::CreateWeakLambda(this, [this]() { EnablePhysicsAnimation(false); }), 0.5, false);*/
 		}
 	}
 
@@ -551,13 +547,6 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 		Matrix.SetOrigin(HitLocation);
 		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), BlockEffect, FTransform(Matrix));
 	}
-
-	/*if (AnimType != EHitAnimType::Blocked)
-	{
-		auto Matrix = FRotationMatrix::MakeFromXZ(DamageCauser->GetActorForwardVector(), ShotFromDirection);
-		Matrix.SetOrigin(HitLocation);
-		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), BloodEffect, FTransform(Matrix));
-	}*/
 }
 
 
@@ -622,7 +611,8 @@ void ABladeCharacter::PostInitializeComponents()
 	Super::PostInitializeComponents();
 
 	OnTakePointDamage.AddDynamic(this, &ABladeCharacter::OnPointDamage);
-	InitializePhysicsAnimation();
+	if(bUsePhysicsAnimation)
+		InitializePhysicsAnimation();
 
 	//GetArrowComponent()->SetHiddenInGame(false);
 	MaxHealth = Health;
@@ -764,7 +754,6 @@ void ABladeCharacter::LookUpAtRate(float Rate)
 void ABladeCharacter::Move(const FInputActionValue& Value)
 {
 	auto Input2D = Value.Get<FVector2D>();
-	InputVector = FVector(Input2D.X, Input2D.Y, 0); 
 	if (Controller != nullptr && !Input2D.IsZero())
 	{
 		// find out which way is forward
@@ -1059,11 +1048,9 @@ float ABladeCharacter::Attack(int InputIndex)
 
 void ABladeCharacter::LeftAttack()
 {
-	if (auto AnimInst = GetAnimInstance())
-	{
-		int AttackIndex = InputVector.IsZero()? 0 : FRotator::ClampAxis(InputVector.ToOrientationRotator().Yaw + 45) / 90 + 1;
-		Attack(AttackIndex);
-	}
+	FVector InputVector = GetInputMove();
+	int AttackIndex = InputVector.IsZero() ? 0 : FRotator::ClampAxis(InputVector.ToOrientationRotator().Yaw + 45) / 90 + 1;
+	Attack(AttackIndex);
 }
 
 void ABladeCharacter::RightAttack()
