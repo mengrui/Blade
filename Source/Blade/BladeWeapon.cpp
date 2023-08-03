@@ -122,7 +122,7 @@ bool ABladeWeapon::SweepTraceCharacter(TArray<FHitResult>& OutHits, const FTrans
 				LastPos, CurPos, FVector(ScaledExtent.X / static_cast<float>(NumSection), ScaledExtent.Y, ScaledExtent.Z),
 				CompEndTM.GetRotation().Rotator(),
 				TraceChannels, false, IgnoreActors,
-				EDrawDebugTrace::Type::None, Hits, true, FLinearColor::Blue))
+				CollisionComponent->bDebugDraw? EDrawDebugTrace::Type::ForDuration : EDrawDebugTrace::None, Hits, true, FLinearColor::Blue))
 			{
 				for (size_t j = 0; j < Hits.Num(); j++)
 				{

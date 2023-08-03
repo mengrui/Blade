@@ -10,20 +10,6 @@
 #include "Engine/SpringInterpolator.h"
 #include "BladeCharacter.generated.h"
 
-UENUM(BlueprintType)
-enum ECharacterState
-{
-	State_Falling,
-	State_Attack,
-	State_Hit,
-	State_Lying,
-	State_Dodge,
-	State_Block,
-	State_Execution,
-	State_Executed,
-	State_Idle
-};
-
 USTRUCT(BlueprintType)
 struct FWeaponSlot 
 {
@@ -120,6 +106,9 @@ public:
 	UPROPERTY(BlueprintReadWrite)
 	bool bWantBlock = false;
 
+	UPROPERTY(BlueprintReadWrite)
+	bool bParrying = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	float CacheInputTime = 0.25f;
 
@@ -139,9 +128,6 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void NotifyAttack(const FHitResult& Hit, float AfterTime);
-
-	FHitResult PredictedHit;
-	float HitAfterTime = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray <FWeaponSlot>			WeaponSlots;
@@ -261,9 +247,6 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent)
 	FVector GetInputMove() const;
-
-	UFUNCTION(BlueprintCallable)
-	bool IsInState(ECharacterState State) const;
 
 	UPROPERTY(EditAnywhere, Category = Movement)
 	float RunSpeed = 500;
