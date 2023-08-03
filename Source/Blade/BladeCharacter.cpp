@@ -104,7 +104,7 @@ void ABladeCharacter::EnablePhysicsAnimation(bool bTrue)
 {
 	if (bTrue)
 	{
-		GetMesh()->SetConstraintProfileForAll(TEXT("HingesOnly"));
+		GetMesh()->SetConstraintProfileForAll(TEXT("None"));
 		GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		PhysicsControlComponent->SetBodyModifiersMovementType(AllBodyModifiers.Names, EPhysicsMovementType::Simulated);
 		PhysicsControlComponent->SetControlsEnabled(AllWorldSpaceControls.Names, true);
