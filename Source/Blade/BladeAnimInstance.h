@@ -28,7 +28,7 @@ class UHitMetaData : public UAnimMetaData
 	GENERATED_BODY()
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int Direction = 0;
+	FVector Direction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TEnumAsByte<EHitAnimType> HitAnimType;

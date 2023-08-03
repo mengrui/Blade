@@ -36,10 +36,7 @@ public:
 	bool bMelee = true;
 
 	UFUNCTION(BlueprintImplementableEvent)
-	void OnWeaponHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, const UPrimitiveComponent* OtherComp, const FVector& NormalImpulse, const FHitResult& Hit);
-
-	UFUNCTION(BlueprintImplementableEvent)
-	void PlayHitEffects(const TArray<FHitResult>& Hits);
+	void OnWeaponHit(AActor* SelfActor, AActor* OtherActor, FVector NormalImpulse, const FHitResult& Hit);
 
 	UFUNCTION(BlueprintImplementableEvent)
 	void OnTraceBegin();
