@@ -52,6 +52,18 @@ struct FExecutionAnimation
 	bool bDebugDraw = false;
 };
 
+USTRUCT(BlueprintType)
+struct FParryAnimation
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UAnimMontage* Montage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector Direction;
+};
+
 extern FName DefaultSlot;
 
 /**
@@ -165,4 +177,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
 	TArray<FExecutionAnimation> ExecutionAnimations;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
+	TArray<FParryAnimation> ParryAnimations;
 };

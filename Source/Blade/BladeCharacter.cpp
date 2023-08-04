@@ -323,12 +323,6 @@ void ABladeCharacter::Tick(float DeltaSeconds)
 	}
 }
 
-static const FVector HitVectors[24] = {
-	FVector(1, 0, 0),FVector(1, 1, 0), FVector(0,1,  0), FVector(-1, 1, 0), FVector(-1, 0, 0), FVector(-1, -1, 0), FVector(0,-1,  0), FVector(1, -1, 0),
-	FVector(1, 0, 1),FVector(1, 1, 1), FVector(0,1,  1), FVector(-1, 1, 1), FVector(-1, 0, 1), FVector(-1, -1, 1), FVector(0,-1,  1), FVector(1, -1, 1),
-	FVector(1, 0, -1),FVector(1, 1, -1), FVector(0,1,  -1), FVector(-1, 1, -1), FVector(-1, 0, -1), FVector(-1, -1, -1), FVector(0,-1,  -1), FVector(1, -1, -1),
-};
-
 static const UHitMetaData* GetHitData(UAnimSequenceBase* Anim)
 {
 	if (Anim)
@@ -353,17 +347,6 @@ FVector ABladeCharacter::GetInputVector() const
 	}
 
 	return FTransform(Rot).TransformVector(GetInputMove().GetSafeNormal2D());
-}
-
-bool ABladeCharacter::IsInState(ECharacterState State) const
-{
-	if (auto AnimInst = GetAnimInstance())
-	{
-		FName CurveName = UEnum::GetValueAsName(State);
-		return AnimInst->GetCurveValue(CurveName) > 0.5;
-	}
-
-	return false;
 }
 
 FVector ABladeCharacter::GetShootLocation()
@@ -841,7 +824,7 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 		ABladeWeapon* Weapon = WeaponSlots[WeaponIndex].Weapon;
 		if (Weapon)
 		{
-			const float TimeStep = 1.0 / 30;
+			const float TimeStep = 1.0 / 60;
 			FName AttachBoneName = WeaponSlots[WeaponIndex].AttachSocketName;
 			auto BoneIndex = GetMesh()->GetBoneIndex(AttachBoneName);
 			FTransform SocketLocalTransform = FTransform::Identity;
@@ -862,7 +845,7 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 			FTransform LastTransform = SocketLocalTransform * GetAnimationBoneTransform(Animation, BoneIndex, StartTime) * AnimToWorld;
 
 			TArray<AActor*> IgnoreActors;
-			for (float SampleTime = StartTime; SampleTime < EndTime; SampleTime += TimeStep)
+			for (float SampleTime = StartTime; SampleTime <= EndTime; SampleTime += TimeStep)
 			{
 				FTransform CurrentTransform = SocketLocalTransform * GetAnimationBoneTransform(Animation, BoneIndex, SampleTime) * AnimToWorld;
 				TArray<FHitResult> Hits;
@@ -884,12 +867,34 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 		}
 	}
 }
-//#pragma optimize("", on)
 
 void ABladeCharacter::NotifyAttack(const FHitResult& Hit, float AfterTime)
 {
-	PredictedHit = Hit;
-	HitAfterTime = AfterTime;
+	FVector ImpulseVector = Hit.TraceEnd - Hit.TraceStart;
+	ImpulseVector = GetMesh()->GetComponentTransform().InverseTransformVector(ImpulseVector.GetSafeNormal());
+
+	if (bParrying)
+	{
+		if (auto AnimInst = GetAnimInstance())
+		{
+			UAnimMontage* ParryAnim = nullptr;
+			float MaxDot = - 1;
+			for (const auto& Item : AnimInst->ParryAnimations)
+			{
+				float Dot = Item.Direction | ImpulseVector;
+				if (Dot > MaxDot)
+				{
+					MaxDot = Dot;
+					ParryAnim = Item.Montage;
+				}
+			}
+
+			if (ParryAnim)
+			{
+				PlayAction(ParryAnim);
+			}
+		}
+	}
 }
 
 UBladeAnimInstance* ABladeCharacter::GetAnimInstance() const
