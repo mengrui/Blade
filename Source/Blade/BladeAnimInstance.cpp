@@ -10,6 +10,7 @@
 #include "GameFramework/PawnMovementComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Animation/AnimNode_SequencePlayer.h"
 #include "BladeUtility.h"
 
 FName DefaultSlot = FName(TEXT("DefaultSlot"));
@@ -96,5 +97,62 @@ void UBladeAnimInstance::StopMontage(float InBlendOutTime, const FName& SlotNode
 	{
 		// Stop all
 		Montage_Stop(InBlendOutTime);
+	}
+}
+
+void UBladeAnimInstance::BeginIdle(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference)
+{
+	LastIdleYaw = GetOwningActor()->GetActorRotation().Yaw;
+	TurnInplaceYawOffset = 0;
+}
+
+void UBladeAnimInstance::UpdateIdle(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference)
+{
+	float ActorYaw = GetOwningActor()->GetActorRotation().Yaw;
+	float DeltaYaw = FMath::FindDeltaAngleDegrees(LastIdleYaw, ActorYaw);
+	TurnInplaceYawOffset = FMath::Clamp(TurnInplaceYawOffset - DeltaYaw, -90, 90);
+	LastIdleYaw = ActorYaw;
+}
+
+void UBladeAnimInstance::BeginTurnInplace(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference)
+{
+	if (FAnimNode_SequencePlayer* SequencePlayer = AnimNodeReference.GetAnimNodePtr<FAnimNode_SequencePlayer>())
+	{
+		if (TurnInplaces.Num() == 4)
+		{
+			if (TurnInplaceYawOffset > 135)
+			{
+				SequencePlayer->SetSequence(TurnInplaces[0]);
+			}
+			else if (TurnInplaceYawOffset > 45)
+			{
+				SequencePlayer->SetSequence(TurnInplaces[1]);
+			}
+			else if (TurnInplaceYawOffset < -45)
+			{
+				SequencePlayer->SetSequence(TurnInplaces[2]);
+			}
+			else if (TurnInplaceYawOffset < -135)
+			{
+				SequencePlayer->SetSequence(TurnInplaces[3]);
+			}
+		}
+	}
+}
+
+void UBladeAnimInstance::UpdateTurnInplace(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference)
+{
+	float DeltaSeconds = UpdateContext.GetContext()->GetDeltaTime();
+	if (FAnimNode_SequencePlayer* SequencePlayer = AnimNodeReference.GetAnimNodePtr<FAnimNode_SequencePlayer>())
+	{
+		float TurnInplaceTime = SequencePlayer->GetAccumulatedTime();
+
+		//UKismetSystemLibrary::PrintString(GetOwningActor(), FString::Printf(TEXT("TurnInplaceTime:   %f"), TurnInplaceTime), false, true);
+		if (UAnimSequence* AnimSeq = Cast<UAnimSequence>(SequencePlayer->GetSequence()))
+		{
+			FTransform DeltaTransform = ConvertLocalRootMotionToWorld(AnimSeq->ExtractRootMotionFromRange(TurnInplaceTime, TurnInplaceTime + DeltaSeconds), GetOwningComponent()->GetRelativeTransform());
+			TurnInplaceYawOffset = FMath::Clamp(TurnInplaceYawOffset + DeltaTransform.Rotator().Yaw, -90, 90);
+			//UKismetSystemLibrary::PrintString(GetOwningActor(), FString::Printf(TEXT("TurnInplaceYawOffset:   %f"), TurnInplaceYawOffset), false, true);
+		}
 	}
 }

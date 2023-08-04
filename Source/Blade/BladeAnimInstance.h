@@ -7,6 +7,8 @@
 #include "Animation/AnimMetaData.h"
 #include "BladeDamageType.h"
 #include "NextComboState.h"
+#include "Animation/AnimExecutionContext.h"
+#include "Animation/AnimNodeReference.h"
 #include "BladeAnimInstance.generated.h"
 
 UENUM(BlueprintType)
@@ -84,6 +86,12 @@ public:
 
 	void StopMontage(float InBlendOutTime, const FName& SlotNodeName);
 
+	UFUNCTION(BlueprintCallable, meta = (BlueprintThreadSafe))
+	void BeginTurnInplace(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference);
+
+	UFUNCTION(BlueprintCallable, meta = (BlueprintThreadSafe))
+	void UpdateTurnInplace(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference);
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Name)
 	FName InplaceSlot = FName(TEXT("InplaceSlot"));
 
@@ -140,6 +148,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
 	UAnimSequence* StandIdle;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Shoot)
+	TArray<UAnimSequence*>	TurnInplaces;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Jump)
 	UAnimSequence* Jump;
 
@@ -180,4 +191,16 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
 	TArray<FParryAnimation> ParryAnimations;
+
+protected:
+	UPROPERTY(BlueprintReadWrite, Category = Shoot)
+	float					TurnInplaceYawOffset = 0;
+
+	float					LastIdleYaw = 0;
+
+	UFUNCTION(BlueprintCallable, meta = (BlueprintThreadSafe))
+	void BeginIdle(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference);
+
+	UFUNCTION(BlueprintCallable, meta = (BlueprintThreadSafe))
+	void UpdateIdle(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference);
 };
