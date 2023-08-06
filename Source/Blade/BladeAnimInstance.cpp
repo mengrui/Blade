@@ -110,7 +110,7 @@ void UBladeAnimInstance::UpdateIdle(const FAnimUpdateContext& UpdateContext, con
 {
 	float ActorYaw = GetOwningActor()->GetActorRotation().Yaw;
 	float DeltaYaw = FMath::FindDeltaAngleDegrees(LastIdleYaw, ActorYaw);
-	TurnInplaceYawOffset = FMath::Clamp(TurnInplaceYawOffset - DeltaYaw, -90, 90);
+	TurnInplaceYawOffset -= DeltaYaw;
 	LastIdleYaw = ActorYaw;
 }
 
@@ -120,19 +120,19 @@ void UBladeAnimInstance::BeginTurnInplace(const FAnimUpdateContext& UpdateContex
 	{
 		if (TurnInplaces.Num() == 4)
 		{
-			if (TurnInplaceYawOffset > 135)
+			if (TurnInplaceYawOffset > 120)
 			{
 				SequencePlayer->SetSequence(TurnInplaces[0]);
 			}
-			else if (TurnInplaceYawOffset > 45)
+			else if (TurnInplaceYawOffset > 60)
 			{
 				SequencePlayer->SetSequence(TurnInplaces[1]);
 			}
-			else if (TurnInplaceYawOffset < -45)
+			else if (TurnInplaceYawOffset < -60)
 			{
 				SequencePlayer->SetSequence(TurnInplaces[2]);
 			}
-			else if (TurnInplaceYawOffset < -135)
+			else if (TurnInplaceYawOffset < -120)
 			{
 				SequencePlayer->SetSequence(TurnInplaces[3]);
 			}
@@ -151,7 +151,8 @@ void UBladeAnimInstance::UpdateTurnInplace(const FAnimUpdateContext& UpdateConte
 		if (UAnimSequence* AnimSeq = Cast<UAnimSequence>(SequencePlayer->GetSequence()))
 		{
 			FTransform DeltaTransform = ConvertLocalRootMotionToWorld(AnimSeq->ExtractRootMotionFromRange(TurnInplaceTime, TurnInplaceTime + DeltaSeconds), GetOwningComponent()->GetRelativeTransform());
-			TurnInplaceYawOffset = FMath::Clamp(TurnInplaceYawOffset + DeltaTransform.Rotator().Yaw, -90, 90);
+			//TurnInplaceYawOffset = FMath::Clamp(TurnInplaceYawOffset + DeltaTransform.Rotator().Yaw, -90, 90);
+			TurnInplaceYawOffset += DeltaTransform.Rotator().Yaw;
 			//UKismetSystemLibrary::PrintString(GetOwningActor(), FString::Printf(TEXT("TurnInplaceYawOffset:   %f"), TurnInplaceYawOffset), false, true);
 		}
 	}

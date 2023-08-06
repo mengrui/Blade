@@ -870,9 +870,9 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 
 void ABladeCharacter::NotifyAttack(const FHitResult& Hit, float AfterTime)
 {
-	FVector ImpulseVector = Hit.TraceEnd - Hit.TraceStart;
-	ImpulseVector = GetMesh()->GetComponentTransform().InverseTransformVector(ImpulseVector.GetSafeNormal());
-
+	FVector ImpactNormalWorld = (Hit.ImpactPoint - GetMesh()->GetBoneLocation(TEXT("spine_05"))).GetSafeNormal();
+	FVector ImpactNormal = GetMesh()->GetComponentTransform().InverseTransformVector(ImpactNormalWorld);
+	UKismetSystemLibrary::DrawDebugArrow(this, Hit.ImpactPoint, Hit.ImpactPoint + ImpactNormalWorld * 20, 5, FLinearColor::Red, 3, 1);
 	if (bParrying)
 	{
 		if (auto AnimInst = GetAnimInstance())
@@ -881,7 +881,7 @@ void ABladeCharacter::NotifyAttack(const FHitResult& Hit, float AfterTime)
 			float MaxDot = - 1;
 			for (const auto& Item : AnimInst->ParryAnimations)
 			{
-				float Dot = Item.Direction | ImpulseVector;
+				float Dot = Item.Direction | ImpactNormal;
 				if (Dot > MaxDot)
 				{
 					MaxDot = Dot;

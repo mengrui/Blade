@@ -124,7 +124,7 @@ public:
 	bool IsAttacking() const;
 
 	UFUNCTION(BlueprintCallable)
-	void PredictAttackHit(UAnimSequenceBase* Animation, float StartTime,float EndTime,  int WeaponIndex) const;
+	void PredictAttackHit(UAnimSequenceBase* Animation, float StartTime, float EndTime, int WeaponIndex) const;
 
 	UFUNCTION(BlueprintCallable)
 	void NotifyAttack(const FHitResult& Hit, float AfterTime);
