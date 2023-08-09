@@ -825,25 +825,14 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 		if (Weapon)
 		{
 			const float TimeStep = 1.0 / 60;
-			FName AttachBoneName = WeaponSlots[WeaponIndex].AttachSocketName;
-			auto BoneIndex = GetMesh()->GetBoneIndex(AttachBoneName);
-			FTransform SocketLocalTransform = FTransform::Identity;
-			if (BoneIndex == -1)
-			{
-				if (auto AttachSocket = GetMesh()->GetSkeletalMeshAsset()->FindSocket(AttachBoneName))
-				{
-					AttachBoneName = AttachSocket->BoneName;
-					SocketLocalTransform = AttachSocket->GetSocketLocalTransform();
-				}
-
-				BoneIndex = GetMesh()->GetBoneIndex(AttachBoneName);
-			}
-
+			FTransform SocketLocalTransform;
+			int32 BoneIndex = GetWeaponBoneIndex(WeaponIndex, SocketLocalTransform);
 			FTransform RootTransform = GetMesh()->GetBoneTransform(0);
 			FTransform RefTransform = GetAnimationBoneTransform(Animation, 0, StartTime);
 			FTransform AnimToWorld = RefTransform.Inverse() * RootTransform;
 			FTransform LastTransform = SocketLocalTransform * GetAnimationBoneTransform(Animation, BoneIndex, StartTime) * AnimToWorld;
 
+			ABladeCharacter* HitCharater = nullptr;
 			TArray<AActor*> IgnoreActors;
 			for (float SampleTime = StartTime; SampleTime <= EndTime; SampleTime += TimeStep)
 			{
@@ -857,20 +846,85 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 						IgnoreActors.Add(Hit.GetActor());
 						if (ABladeCharacter* Ch = Cast<ABladeCharacter>(Hit.GetActor()))
 						{
-							Ch->NotifyAttack(Hit, SampleTime - StartTime);
+							//Ch->NotifyAttack(Hit, SampleTime - StartTime);
+							HitCharater = Ch;
+							goto CharacterChecked;
 						}
 					}
 				}
 							
 				LastTransform = CurrentTransform;
 			}
+
+		CharacterChecked:
+			if (HitCharater && HitCharater->GetAnimInstance() && HitCharater->GetWeapon(0))
+			{
+				const auto& ParryAnimations = HitCharater->GetAnimInstance()->ParryAnimations;
+				FTransform OtherSocketLocalTransform;
+				int32 OtherWeaponBoneIndex = GetWeaponBoneIndex(0, OtherSocketLocalTransform);
+				FTransform OtherRootTransform = HitCharater->GetMesh()->GetBoneTransform(0);
+
+				TArray<UTrackCollisionComponent*> CollisionComponents;
+				Weapon->GetComponents(CollisionComponents);
+				if (CollisionComponents.IsEmpty()) return;
+				UTrackCollisionComponent* SelfCollision = CollisionComponents[0];
+				HitCharater->GetWeapon(0)->GetComponents(CollisionComponents);
+				if (CollisionComponents.IsEmpty()) return;
+				UTrackCollisionComponent* OtherCollision = CollisionComponents[0];
+				auto OtherShape = OtherCollision->GetCollisionShape();
+
+				for (float SampleTime = StartTime; SampleTime <= EndTime; SampleTime += TimeStep)
+				{
+					FTransform WeaponTransform = SocketLocalTransform * GetAnimationBoneTransform(Animation, BoneIndex, SampleTime) * AnimToWorld;
+					FTransform ToCheckSpace = WeaponTransform.Inverse() * Weapon->GetActorTransform();
+					UAnimMontage* BestParryAnim = nullptr;
+					for (UAnimMontage* ParryAnim : ParryAnimations)
+					{
+						FTransform ParryRefTransform = GetAnimationBoneTransform(ParryAnim, 0, 0);
+						FTransform ParryAnimToWorld = ParryRefTransform.Inverse() * OtherRootTransform;
+						FTransform ParryLastTransform = OtherSocketLocalTransform * GetAnimationBoneTransform(ParryAnim, BoneIndex, StartTime) * ParryAnimToWorld;
+						ParryLastTransform *= ToCheckSpace;
+						for (float ParryTime = 0; ParryTime <= ParryAnim->GetPlayLength(); ParryTime += TimeStep)
+						{
+							FTransform ParryCurTransform = OtherSocketLocalTransform * GetAnimationBoneTransform(ParryAnim, OtherWeaponBoneIndex, ParryTime) * ParryAnimToWorld;
+							ParryCurTransform *= ToCheckSpace;
+							FHitResult ParryHit;
+							if (SelfCollision->SweepComponent(ParryHit, ParryLastTransform.GetLocation(), ParryCurTransform.GetLocation(), ParryCurTransform.GetRotation(), OtherShape))
+							{
+
+							}
+
+							ParryLastTransform = ParryCurTransform;
+						}
+					}
+				}
+			}
 		}
 	}
 }
 
+int32 ABladeCharacter::GetWeaponBoneIndex(int WeaponIndex, FTransform& SocketLocalTransform) const
+{
+	FName AttachBoneName = WeaponSlots[WeaponIndex].AttachSocketName;
+	auto BoneIndex = GetMesh()->GetBoneIndex(AttachBoneName);
+	SocketLocalTransform = FTransform::Identity;
+	if (BoneIndex == -1)
+	{
+		if (auto AttachSocket = GetMesh()->GetSkeletalMeshAsset()->FindSocket(AttachBoneName))
+		{
+			AttachBoneName = AttachSocket->BoneName;
+			SocketLocalTransform = AttachSocket->GetSocketLocalTransform();
+		}
+
+		BoneIndex = GetMesh()->GetBoneIndex(AttachBoneName);
+	}
+
+	return BoneIndex;
+}
+
 void ABladeCharacter::NotifyAttack(const FHitResult& Hit, float AfterTime)
 {
-	FVector ImpactNormalWorld = (Hit.ImpactPoint - GetMesh()->GetBoneLocation(TEXT("spine_05"))).GetSafeNormal();
+	/*FVector ImpactNormalWorld = (Hit.ImpactPoint - GetMesh()->GetBoneLocation(TEXT("spine_05"))).GetSafeNormal();
 	FVector ImpactNormal = GetMesh()->GetComponentTransform().InverseTransformVector(ImpactNormalWorld);
 	UKismetSystemLibrary::DrawDebugArrow(this, Hit.ImpactPoint, Hit.ImpactPoint + ImpactNormalWorld * 20, 5, FLinearColor::Red, 3, 1);
 	if (bParrying)
@@ -894,7 +948,7 @@ void ABladeCharacter::NotifyAttack(const FHitResult& Hit, float AfterTime)
 				PlayAction(ParryAnim);
 			}
 		}
-	}
+	}*/
 }
 
 UBladeAnimInstance* ABladeCharacter::GetAnimInstance() const
@@ -948,15 +1002,10 @@ ACharacter* ABladeCharacter::GetAutoTarget() const
 		return SelectedTarget;
 	}
 
-	if (AutoSelectAngleCurve == nullptr || AutoSelectDistCurve == nullptr)
-	{
-		return nullptr;
-	}
-
 	ACharacter* AutoTarget = nullptr;
 
 	FVector SelectDirection = GetInputVector().IsZero() ? GetActorForwardVector() : GetInputVector();
-	float MaxWeight = KINDA_SMALL_NUMBER;
+	float MinDist = FLT_MAX;
 	for (ACharacter* Pawn : TActorRange<ACharacter>(GetWorld()))
 	{
 		if (Pawn != this)
@@ -964,12 +1013,11 @@ ACharacter* ABladeCharacter::GetAutoTarget() const
 			FVector PawnVector = Pawn->GetActorLocation() - GetActorLocation();
 			float Angle = FMath::Acos(PawnVector.GetSafeNormal2D() | SelectDirection);
 			Angle = Angle / PI * 180;
-			const float AngleWeight = AutoSelectAngleCurve->GetFloatValue(Angle);
-			const float DistWeight = AutoSelectDistCurve->GetFloatValue(PawnVector.Size());
+			const float Dist = PawnVector.Size();
 			
-			if (AngleWeight * DistWeight > MaxWeight)
+			if (Angle < 30 && Dist < MinDist)
 			{
-				MaxWeight = AngleWeight * DistWeight;
+				MinDist = Dist;
 				AutoTarget = Pawn;
 			}
 		}

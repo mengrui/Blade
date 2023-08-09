@@ -126,6 +126,8 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void PredictAttackHit(UAnimSequenceBase* Animation, float StartTime, float EndTime, int WeaponIndex) const;
 
+	void GetWeaponBoneIndex(int WeaponIndex, FTransform& SocketLocalTransform) const;
+
 	UFUNCTION(BlueprintCallable)
 	void NotifyAttack(const FHitResult& Hit, float AfterTime);
 
