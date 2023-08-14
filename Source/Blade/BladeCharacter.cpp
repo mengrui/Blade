@@ -748,14 +748,14 @@ void ABladeCharacter::Move(const FInputActionValue& Value)
 		const FVector YAxis = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 		AddMovementInput(XAxis, Input2D.X);
 		AddMovementInput(YAxis, Input2D.Y);
-		if (auto AnimInst = GetAnimInstance())
+		/*if (auto AnimInst = GetAnimInstance())
 		{
 			FAnimMontageInstance* MontageInstance = AnimInst->GetRootMotionMontageInstance();
 			if (bMoveAble && MontageInstance && !MontageInstance->IsRootMotionDisabled())
 			{
 				MontageInstance->PushDisableRootMotion();
 			}
-		}
+		}*/
 	}
 }
 
