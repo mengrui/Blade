@@ -4,6 +4,7 @@
 #include "AttackNotifyState.h"
 #include "BladeCharacter.h"
 #include "BladeWeapon.h"
+#include "Kismet/KismetSystemLibrary.h"
 
 void UAttackNotifyState::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float TotalDuration, const FAnimNotifyEventReference& EventReference)
 {
@@ -15,7 +16,9 @@ void UAttackNotifyState::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequ
 			Character->WeaponSlots[WeaponIndex].Weapon->SetDamageType(DamageType);
 			Character->WeaponSlots[WeaponIndex].Weapon->HitCameraShake = HitCameraShake;
 			Character->WeaponSlots[WeaponIndex].Weapon->HitPlayRateCurve = HitPlayRateCurve;
-			//Character->PredictAttackHit(Animation, EventReference.GetNotify()->GetTriggerTime(), EventReference.GetNotify()->GetEndTriggerTime(),WeaponIndex);
+			float StartTime = EventReference.GetNotify()->GetTriggerTime();
+			float EndTime = EventReference.GetNotify()->GetEndTriggerTime();
+			Character->PredictAttackHit(Animation, StartTime, EndTime,	WeaponIndex);
 		}
 	}
 }

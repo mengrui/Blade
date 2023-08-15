@@ -836,6 +836,7 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 			ABladeCharacter* HitCharater = nullptr;
 			TArray<AActor*> IgnoreActors;
 			float HitedTime = 0;
+			bool bSweepAttack = false;
 			for (float SampleTime = StartTime; SampleTime <= EndTime; SampleTime += TimeStep)
 			{
 				FTransform CurrentTransform = SocketLocalTransform * GetAnimationBoneTransform(Animation, BoneIndex, SampleTime) * AnimToWorld;
@@ -851,6 +852,8 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 							//Ch->NotifyAttack(Hit, SampleTime - StartTime);
 							HitCharater = Ch;
 							HitedTime = SampleTime;
+							FVector LastPosInLocal = LastTransform.GetRelativeTransform(CurrentTransform).GetLocation();
+							bSweepAttack = !LastPosInLocal.IsNearlyZero() && FMath::Abs(LastPosInLocal.GetSafeNormal().X) < 0.5f;
 							goto CharacterChecked;
 						}
 					}
@@ -881,12 +884,11 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 				for (float SampleTime = StartTime; SampleTime <= EndTime; SampleTime += TimeStep)
 				{
 					FTransform WeaponTransform = SocketLocalTransform * GetAnimationBoneTransform(Animation, BoneIndex, SampleTime) * AnimToWorld;
-					FTransform ToCheckSpace = WeaponTransform.Inverse() * Weapon->GetActorTransform();
 					FTransform SelfCollisionTransform = SelfCollision->GetRelativeTransform() * WeaponTransform;
 					FVector SelfDirection = (SelfCollisionTransform.GetLocation() - LastSelfCollisionTransform.GetLocation()).GetSafeNormal();
-					SelfDirection = ToCheckSpace.TransformVector(SelfDirection);
+	
 					LastSelfCollisionTransform = SelfCollisionTransform;
-					UAnimMontage* BestParryAnim = nullptr;
+					/*UAnimMontage* BestParryAnim = nullptr;
 					float ParryTime = 0;
 					FTransform ParryStartTransform, ParryEndTransform;
 					float MaxParryTime = SampleTime - StartTime;
@@ -917,7 +919,8 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 							FTransform ParryCurTransform = OtherCollisionLocalTransform * GetAnimationBoneTransform(ParryAnim, OtherWeaponBoneIndex, IterTime) * ParryAnimToWorld;
 							ParryCurTransform *= ToCheckSpace;
 							FHitResult ParryHit;
-							if (SelfCollision->SweepComponent(ParryHit, ParryLastTransform.GetLocation(), ParryCurTransform.GetLocation(), ParryCurTransform.GetRotation(), OtherShape))
+
+							if (bHit)//SelfCollision->SweepComponent(ParryHit, ParryLastTransform.GetLocation(), ParryCurTransform.GetLocation(), ParryCurTransform.GetRotation(), OtherShape))
 							{
 								float Cost = FMath::Abs(ParryCurTransform.GetUnitAxis(EAxis::X) | (SelfCollision->GetForwardVector()^ SelfDirection));
 								if (Cost > MaxCost)
@@ -972,7 +975,7 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 							Hit, true, FLinearColor::Green);
 
 						break;
-					}
+					}*/
 				}
 			}
 		}
@@ -1036,6 +1039,32 @@ void ABladeCharacter::DebugDrawWeaponTrack(UAnimSequenceBase* Animation, float S
 		}
 	}
 #endif
+}
+
+bool ABladeCharacter::IsWeaponSweeping(UAnimSequenceBase* Animation, int WeaponIndex, float Time) const
+{
+	if (WeaponSlots.IsValidIndex(WeaponIndex) && WeaponSlots[WeaponIndex].Weapon)
+	{
+		TArray<UTrackCollisionComponent*> CollisionComponents;
+		WeaponSlots[WeaponIndex].Weapon->GetComponents(CollisionComponents);
+		FTransform WeaponLocal;
+		int32 BoneIndex = GetWeaponBoneIndex(WeaponIndex, WeaponLocal);
+		if (!CollisionComponents.IsEmpty())
+		{
+			auto TrackCollistion = CollisionComponents[0];
+			FTransform CollistionLocal = TrackCollistion->GetRelativeTransform() * WeaponLocal;
+			float TimeStep = 1.0 / 30;
+			FTransform LastTransform = CollistionLocal * GetAnimationBoneTransform(Animation, BoneIndex, Time - TimeStep);
+			FTransform CurrentTransform = CollistionLocal * GetAnimationBoneTransform(Animation, BoneIndex, Time);
+			FVector LastPosInLocal = LastTransform.GetRelativeTransform(CurrentTransform).GetLocation();
+			if (!LastPosInLocal.IsNearlyZero() && FMath::Abs(LastPosInLocal.GetSafeNormal().X) < 0.5f)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 void ABladeCharacter::NotifyAttack(const FHitResult& Hit, float AfterTime)

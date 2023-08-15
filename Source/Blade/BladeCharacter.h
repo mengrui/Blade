@@ -132,6 +132,9 @@ public:
 	void DebugDrawWeaponTrack(UAnimSequenceBase* Animation, float StartTime, float EndTime, int WeaponIndex, float TimeStep = 0.01666667) const;
 
 	UFUNCTION(BlueprintCallable)
+	bool IsWeaponSweeping(UAnimSequenceBase* Animation, int WeaponIndex, float Time) const;
+
+	UFUNCTION(BlueprintCallable)
 	void NotifyAttack(const FHitResult& Hit, float AfterTime);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
