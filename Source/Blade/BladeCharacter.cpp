@@ -913,6 +913,8 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 							}
 						}
 
+						ParryStartTime = 0;
+						ParryEndTime = EndTime;
 						if (bSweepAttack)
 						{
 							FTransform ParryLastTransform = OtherCollisionLocalTransform * GetAnimationBoneTransform(ParryAnim, OtherWeaponBoneIndex, ParryStartTime) * ParryAnimToWorld;
@@ -925,7 +927,9 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 								if (SweepCheck(SelfCollision->GetCollisionShape(), LastSelfCollisionTransform, OtherShape, ParryCurTransform, SelfDirection, ImpactLoc, ImpactNorm))
 								{
 									float Cost = 0;
-									Cost += IterTime;
+									//Cost += IterTime;
+									Cost += (ImpactLoc - SelfCollisionTransform.GetLocation()).Size() / SelfCollision->GetScaledBoxExtent().X 
+										+ (ImpactLoc - ParryCurTransform.GetLocation()).Size() / OtherCollision->GetScaledBoxExtent().X;
 									Cost += (SelfDirection.GetSafeNormal() | OtherDirection);
 									Cost -= FMath::Abs(ParryCurTransform.GetUnitAxis(EAxis::X) | SelfCollisionTransform.GetUnitAxis(EAxis::Z));
 									if (Cost < MinCost)
@@ -982,7 +986,7 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, float Start
 						}
 						else
 						{
-							HitCharater->GetAnimInstance()->Montage_Play(BestParryAnim, 1, EMontagePlayReturnType::MontageLength, - DelayTime);
+							HitCharater->GetAnimInstance()->Montage_Play(BestParryAnim, 1, EMontagePlayReturnType::MontageLength, 0);
 						}
 
 						if (bSweepAttack)

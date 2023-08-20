@@ -91,7 +91,7 @@ static void GenBoneSyncMarker(UAnimSequence* Animation, const int32 BoneIndex, f
 		{
 			UAnimationBlueprintLibrary::AddAnimationSyncMarker(Animation, MarkerName, CurTime, SyncMarkerNotifyTrackName);
 		}
-
+	
 		//LastFootLoc = LastFootLoc;
 		bLastOnGround = bOnGround;
 	}
