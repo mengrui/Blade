@@ -101,6 +101,7 @@ bool ABladeWeapon::SweepTraceCharacter(TArray<FHitResult>& OutHits, const FTrans
 	GetComponents(CollisionComponents);
 	TArray<TEnumAsByte<EObjectTypeQuery> >  TraceChannels;
 	TraceChannels.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
+	TraceChannels.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_PhysicsBody));
 	for (auto CollisionComponent : CollisionComponents)
 	{
 		TArray<AActor*> IgnoreActors;
@@ -128,7 +129,7 @@ bool ABladeWeapon::SweepTraceCharacter(TArray<FHitResult>& OutHits, const FTrans
 				{
 					if (!IgnoreComponents.Contains(Hits[j].GetComponent()))
 					{
-						if (Hits[j].GetActor()->IsA<ABladeCharacter>())
+						if (Hits[j].GetActor()->IsA<ABladeCharacter>() || Hits[j].GetActor()->IsA<ABladeWeapon>())
 						{
 							OutHits.Add(Hits[j]);
 						}
