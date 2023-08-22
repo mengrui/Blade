@@ -39,6 +39,18 @@ public:
 	FName BoneName;
 };
 
+UCLASS(Blueprintable)
+class UBoneTrackMetaData : public UAnimMetaData
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY(BlueprintReadOnly)
+	FName BoneName;
+
+	UPROPERTY(BlueprintReadOnly)
+	TArray<FTransform> BoneTracks;
+};
+
 USTRUCT(BlueprintType)
 struct FExecutionAnimation
 {

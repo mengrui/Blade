@@ -3,6 +3,8 @@
 
 #include "AnimationProcessLibrary.h"
 #include "BladeUtility.h"
+#include "BladeAnimInstance.h"
+
 #if WITH_EDITOR
 #include "AnimationBlueprintLibrary.h"
 
@@ -111,4 +113,38 @@ void UAnimationProcessLibrary::AddSyncMarker(UAnimSequence* Animation, const FNa
 	GenBoneSyncMarker(Animation, LeftBoneIndex, FootHeightThreshold, LeftMarkerName, SyncMarkerNotifyTrackName);
 	GenBoneSyncMarker(Animation, RightBoneIndex, FootHeightThreshold, RightMarkerName, SyncMarkerNotifyTrackName);
 }
+
+void UAnimationProcessLibrary::GenerateBoneTrackMetaData(UAnimSequence* Animation, const FName& BoneName)
+{
+	TArray<UAnimMetaData*> TobeRemoved;
+	for (auto& MetaData : Animation->GetMetaData())
+	{
+		if (UBoneTrackMetaData* TrackData = Cast<UBoneTrackMetaData>(MetaData))
+		{
+			if (TrackData->BoneName == BoneName)
+			{
+				TobeRemoved.Add(TrackData);
+			}
+		}
+	}
+
+	Animation->RemoveMetaData(TobeRemoved);
+	UBoneTrackMetaData* TrackData = NewObject<UBoneTrackMetaData>(Animation);
+	TrackData->BoneName = BoneName;
+	USkeleton* Skeleton = Animation->GetSkeleton();
+	const auto& RefSkeleton = Skeleton->GetReferenceSkeleton();
+	int BoneIndex = RefSkeleton.FindBoneIndex(BoneName);
+	if (BoneIndex != INDEX_NONE)
+	{
+		int FrameNum = Animation->GetNumberOfSampledKeys();
+		for (int i = 0; i < FrameNum; i++)
+		{
+			float SampleTime = Animation->GetTimeAtFrame(i);
+			TrackData->BoneTracks.Add(GetAnimationBoneTransform(Animation, BoneIndex, SampleTime));
+		}
+	}
+
+	Animation->AddMetaData(TrackData);
+}
+
 #endif

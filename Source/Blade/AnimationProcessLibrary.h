@@ -23,5 +23,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CopyBones")
 	static void AddSyncMarker(UAnimSequence* Animation, const FName& SyncMarkerNotifyTrackName,
 		const FName& LeftBoneName, const FName& RightBoneName, const FName& LeftMarkerName, const FName& RightMarkerName, float FootHeightThreshold);
+
+	UFUNCTION(BlueprintCallable, Category = "MetaData")
+	void GenerateBoneTrackMetaData(UAnimSequence* Animation, const FName& BoneName);
 #endif
 };
