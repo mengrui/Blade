@@ -114,7 +114,7 @@ void UAnimationProcessLibrary::AddSyncMarker(UAnimSequence* Animation, const FNa
 	GenBoneSyncMarker(Animation, RightBoneIndex, FootHeightThreshold, RightMarkerName, SyncMarkerNotifyTrackName);
 }
 
-void UAnimationProcessLibrary::GenerateBoneTrackMetaData(UAnimSequence* Animation, const FName& BoneName)
+void UAnimationProcessLibrary::GenerateBoneTrackMetaData(UAnimSequenceBase* Animation, const FName& BoneName)
 {
 	TArray<UAnimMetaData*> TobeRemoved;
 	for (auto& MetaData : Animation->GetMetaData())
@@ -134,12 +134,13 @@ void UAnimationProcessLibrary::GenerateBoneTrackMetaData(UAnimSequence* Animatio
 	USkeleton* Skeleton = Animation->GetSkeleton();
 	const auto& RefSkeleton = Skeleton->GetReferenceSkeleton();
 	int BoneIndex = RefSkeleton.FindBoneIndex(BoneName);
+	const float FrameTime = 1.f / 60.f;
 	if (BoneIndex != INDEX_NONE)
 	{
-		int FrameNum = Animation->GetNumberOfSampledKeys();
+		int FrameNum = Animation->GetPlayLength() / FrameTime + 1;
 		for (int i = 0; i < FrameNum; i++)
 		{
-			float SampleTime = Animation->GetTimeAtFrame(i);
+			float SampleTime = i * FrameTime;
 			TrackData->BoneTracks.Add(GetAnimationBoneTransform(Animation, BoneIndex, SampleTime));
 		}
 	}

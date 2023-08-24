@@ -1,6 +1,7 @@
 #include "BladeUtility.h"
 #include "Animation/AnimSequence.h"
-#include "Chaos/GJK.h"
+#include "Chaos/CastingUtilities.h"
+#include "Chaos/GeometryQueries.h"
 
 FTransform ConvertLocalRootMotionToWorld(const FTransform& InTransform, const FTransform& ComponentTransform)
 {
@@ -103,18 +104,32 @@ FTransform GetAnimMontageBoneTransform(UAnimMontage* Montage, int BoneIndex, flo
 	}
 }
 
-extern bool SweepCheck(const FCollisionShape& A, const FTransform& TransformA, const  FCollisionShape& B, const FTransform& TransformB, const FVector& DirectionA, FVector& HitLocation, FVector& HitNormal)
+extern bool SweepCheck(const FCollisionShape& A, const FTransform& TransformA, const  FCollisionShape& B, const FTransform& TransformB, const FVector& MovedB, FVector& HitLocation, FVector& HitNormal)
 {
-	FVector SweepVec = TransformB.InverseTransformVector(DirectionA);
-	Chaos::FRigidTransform3 StartTM = TransformA.GetRelativeTransform(TransformB);
-	double HitTime = 0;
-	Chaos::FVec3 ImpactPoint, ImpactNormal;
-	Chaos::FVec3 ExtentA = B.GetBox();
-	Chaos::FVec3 ExtentB = A.GetBox();
-	bool bHit = Chaos::GJKRaycast2(Chaos::TBox<double, 3>(-ExtentA, ExtentA), Chaos::TBox<double, 3>(-ExtentB, ExtentB), StartTM, Chaos::FVec3(SweepVec.GetSafeNormal()), SweepVec.Size(),
-		HitTime, ImpactPoint, ImpactNormal);
-	HitLocation = TransformB.TransformPosition(ImpactPoint);
-	HitNormal = TransformB.TransformVectorNoScale(ImpactNormal);
+	//FVector SweepVec = TransformB.InverseTransformVector(DirectionA);
+	//Chaos::FRigidTransform3 StartTM = TransformA.GetRelativeTransform(TransformB);
+	//double HitTime = 0;
+	//Chaos::FVec3 ImpactPoint, ImpactNormal;
+	//Chaos::FVec3 ExtentA = B.GetBox();
+	//Chaos::FVec3 ExtentB = A.GetBox();
+	//bool bHit = Chaos::GJKRaycast2(Chaos::TBox<double, 3>(-ExtentA, ExtentA), Chaos::TBox<double, 3>(-ExtentB, ExtentB), StartTM, Chaos::FVec3(SweepVec.GetSafeNormal()), SweepVec.Size(),
+	//	HitTime, ImpactPoint, ImpactNormal);
 
-	return bHit;
+	FPhysicsShapeAdapter ShapeAdapterA(FQuat::Identity, A);
+	FPhysicsShapeAdapter ShapeAdapterB(FQuat::Identity, B);
+
+	Chaos::FVec3 WorldPosition;
+	Chaos::FVec3 WorldNormal;
+	Chaos::FReal Distance;
+	int32 FaceIdx;
+	Chaos::FVec3 FaceNormal;
+	if (Chaos::Utilities::CastHelper(ShapeAdapterB.GetGeometry(), TransformA, [&](const auto& Downcast, const auto& ATM)
+		{ return Chaos::SweepQuery(ShapeAdapterA.GetGeometry(), ATM, Downcast, TransformB, MovedB.GetSafeNormal(), MovedB.Size(), Distance, WorldPosition, WorldNormal, FaceIdx, FaceNormal, 0.f, false); }))
+	{
+		HitLocation = WorldPosition;
+		HitNormal = WorldNormal;
+		return true;
+	}
+
+	return false;
 }

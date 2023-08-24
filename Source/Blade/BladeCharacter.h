@@ -124,9 +124,11 @@ public:
 	bool IsAttacking() const;
 
 	UFUNCTION(BlueprintCallable)
-	void PredictAttackHit(UAnimSequenceBase* Animation, float StartTime, float EndTime, int WeaponIndex) const;
+	void PredictAttackHit(UAnimSequenceBase* Animation, int WeaponIndex) const;
 
-	int32 GetWeaponBoneIndex(int WeaponIndex, FTransform& SocketLocalTransform) const;
+	void PlayParryAnim(const FCollisionShape& AttackShape,const TArray<FTransform>& ShapeTracks, float StartTime, bool bSweep);
+
+	int32 GetWeaponBoneIndex(int WeaponIndex) const;
 
 	UFUNCTION(BlueprintCallable)
 	void DebugDrawWeaponTrack(UAnimSequenceBase* Animation, float StartTime, float EndTime, int WeaponIndex, float TimeStep = 0.01666667) const;

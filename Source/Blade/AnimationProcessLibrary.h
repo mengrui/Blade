@@ -25,6 +25,6 @@ public:
 		const FName& LeftBoneName, const FName& RightBoneName, const FName& LeftMarkerName, const FName& RightMarkerName, float FootHeightThreshold);
 
 	UFUNCTION(BlueprintCallable, Category = "MetaData")
-	void GenerateBoneTrackMetaData(UAnimSequence* Animation, const FName& BoneName);
+	static void GenerateBoneTrackMetaData(UAnimSequenceBase* Animation, const FName& BoneName);
 #endif
 };
