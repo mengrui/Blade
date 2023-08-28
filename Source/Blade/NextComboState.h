@@ -15,11 +15,11 @@ struct FActionCommand
 	int InputIndex = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	UAnimSequenceBase* Animation = nullptr;
+	UAnimMontage* Animation = nullptr;
 
 	FActionCommand() {}
 
-	FActionCommand(int Index, UAnimSequenceBase* Anim)
+	FActionCommand(int Index, UAnimMontage* Anim)
 		:InputIndex(Index), Animation(Anim) {}
 
 	FORCEINLINE bool operator ==(const FActionCommand& Other) const

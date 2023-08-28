@@ -275,8 +275,6 @@ void ABladeCharacter::Tick(float DeltaSeconds)
 	auto AnimInst = GetAnimInstance();
 	if (!AnimInst) return;
 
-	ExecutedCachedInput();
-
 	if (bWantBlock != GetBlock())
 	{
 		SetBlock(bWantBlock);
@@ -310,10 +308,6 @@ void ABladeCharacter::Tick(float DeltaSeconds)
 	}
 
 	PlayerTitleComponent->SetHiddenInGame(HealthUIDisplayTime <= 0);
-
-	//CameraTrace();
-
-	TickExecution();
 
 	if (auto Ch = const_cast<ABladeCharacter*>(Cast<ABladeCharacter>(SelectedTarget)))
 	{
@@ -433,7 +427,7 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 	const int HitBoneIndex = RefSkeleton.FindBoneIndex(BoneName);
 	const FVector HitDirInMeshSpace = GetMesh()->GetComponentTransform().InverseTransformVector(ForceFromDir);
 	float MinCost = FLT_MAX;
-	UAnimSequenceBase* HitAnim = nullptr;
+	UAnimMontage* HitAnim = nullptr;
 	FVector HitAnimDirection = FVector::Zero();
 	if (Health > 0)
 	{
@@ -479,21 +473,10 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 
 	if (HitAnim)
 	{
-		bMoveAble = false;
 		PlayAction(HitAnim);
-		GetCharacterMovement()->Velocity = FVector::ZeroVector;
-		if (AnimType == EHitAnimType::Float)
-		{
-			GetCharacterMovement()->AddImpulse(FVector(0, 0, 1) * Force, true);
-		}
-		else
-		{
-			GetCharacterMovement()->AddImpulse(-CauserDir * Force, true);
-		}
-		
 		//UKismetSystemLibrary::PrintString(this, FString::Printf(TEXT("Play HitAnimation %s"), *HitAnim->GetName()));
 	}
-	else
+	else if(bUsePhysicsAnimation)
 	{
 		if (AnimType == EHitAnimType::Float || AnimType == EHitAnimType::Knock || Health <= 0)
 		{
@@ -509,7 +492,7 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 				GetMesh()->AddVelocityChangeImpulseAtLocation(ForceVector, HitLocation);
 			}
 		}
-		else if (bUsePhysicsAnimation)
+		else
 		{
 			if(GetMesh()->IsSimulatingPhysics(BoneName))
 				GetMesh()->AddImpulseAtLocation(ShotFromDirection * Force, HitLocation, BoneName);
@@ -523,13 +506,6 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 
 			GetWorldTimerManager().SetTimer(StopPhysAnimTimerHandle, FSimpleDelegate::CreateWeakLambda(this, [this]() { EnablePhysicsAnimation(false); }), 0.5, false);*/
 		}
-	}
-
-	if (AnimType == EHitAnimType::Blocked || AnimType == EHitAnimType::BreakBlock)
-	{
-		auto Matrix = FRotationMatrix::MakeFromZ(ShotFromDirection);
-		Matrix.SetOrigin(HitLocation);
-		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), BlockEffect, FTransform(Matrix));
 	}
 }
 
@@ -561,32 +537,6 @@ void ABladeCharacter::SetHealth(float val)
 	{
 		bHitAble = false;
 		OnDead();
-	}
-}
-
-void ABladeCharacter::ExecutedCachedInput()
-{
-	for (int i = CachedInputs.Num() - 1; i >= 0; i--)
-	{
-		const auto& Input = CachedInputs[i];
-		if (Input.Time + CacheInputTime < GetWorld()->GetTimeSeconds())
-		{
-			CachedInputs.RemoveAt(i);
-		}
-		else
-		{
-			for (int j = 0; j < CachedCommands.Num(); j++)
-			{
-				const auto& Cmd = CachedCommands[j];
-				if (Cmd.InputIndex == Input.Index)
-				{
-					PlayAction(Cmd.Animation);
-					CachedCommands.Empty();
-					CachedInputs.Empty();
-					return;
-				}
-			}
-		}
 	}
 }
 
@@ -767,50 +717,47 @@ void ABladeCharacter::LookAt(const FInputActionValue& Value)
 	AddControllerPitchInput(MouseDelta.Y * TurnRateGamepad * GetWorld()->GetDeltaSeconds());
 }
 
-float ABladeCharacter::PlayAction(UAnimSequenceBase* AnimSeq)
+void ABladeCharacter::PlayAction(UAnimMontage* Montage)
+{
+	if (GetLocalRole() == ROLE_AutonomousProxy)
+	{
+		PlayMontage(Montage);
+		ServerPlayAction(Montage);
+	}
+	else if (GetLocalRole() == ROLE_Authority)
+	{
+		MultiPlayAction(Montage);
+	}
+}
+
+void ABladeCharacter::PlayMontage(UAnimMontage* AnimMontage)
 {
 	if (auto AnimInst = GetAnimInstance())
 	{
-		UAnimMontage* AnimMontage = Cast<UAnimMontage>(AnimSeq);
-		if (AnimMontage)
-			AnimInst->Montage_Play(AnimMontage);
-		else
-			AnimMontage = AnimInst->PlaySlotAnimationAsDynamicMontage(AnimSeq, DefaultSlot);
-		
-		if (auto MontageInst = AnimInst->GetActiveInstanceForMontage(AnimMontage))
+		if (AnimInst->Montage_Play(AnimMontage) > 0)
+		{
+			bMoveAble = false;
+		}
+	
+		/*if (auto MontageInst = AnimInst->GetActiveInstanceForMontage(AnimMontage))
 		{
 			MontageInst->Advance(0.001, nullptr, false);
 			AnimInst->TriggerAnimNotifies(0.001);
-		}
-
-		bMoveAble = false;
-		return GetNextComboTime(AnimSeq);
+		}*/
 	}
-
-	return 0;
 }
 
-template<typename F>
-float ABladeCharacter::PlayAction(UAnimMontage* AnimSeq, F Func)
+void ABladeCharacter::ServerPlayAction_Implementation(UAnimMontage* Montage)
 {
-	if (auto AnimInst = GetAnimInstance())
+	MultiPlayAction(Montage);
+}
+
+void ABladeCharacter::MultiPlayAction_Implementation(UAnimMontage* Montage)
+{
+	if (GetLocalRole() != ROLE_AutonomousProxy)
 	{
-		bMoveAble = false;
-		UAnimMontage* AnimMontage = Cast<UAnimMontage>(AnimSeq);
-		if (AnimMontage)
-			AnimInst->Montage_Play(AnimMontage);
-		else
-			AnimMontage = AnimInst->PlaySlotAnimationAsDynamicMontage(AnimSeq, DefaultSlot);
-
-		if (AnimMontage)
-		{
-			MontageEndedDelegate.BindWeakLambda(this, Func);
-			AnimInst->Montage_SetBlendingOutDelegate(MontageEndedDelegate, AnimMontage);
-			return AnimMontage->GetPlayLength();
-		}
+		PlayMontage(Montage);
 	}
-
-	return 0;
 }
 
 bool ABladeCharacter::IsAttacking() const
@@ -818,7 +765,6 @@ bool ABladeCharacter::IsAttacking() const
 	return false;
 }
 
-#pragma optimize("", off)
 static void GetBoneTrackData(UAnimSequenceBase* Animation, const FName& BoneName, TArray<FTransform>& BoneTransforms)
 {
 	const TArray<UAnimMetaData*>& MetaDatas = Animation->GetMetaData();
@@ -1089,7 +1035,6 @@ void ABladeCharacter::PlayParryAnim(const FCollisionShape& AttackShape, const TA
 	}
 }
 
-#pragma optimize("", on)
 int32 ABladeCharacter::GetWeaponBoneIndex(int WeaponIndex) const
 {
 	FName AttachBoneName = WeaponSlots[WeaponIndex].AttachSocketName;
@@ -1172,35 +1117,6 @@ bool ABladeCharacter::IsWeaponSweeping(UAnimSequenceBase* Animation, int WeaponI
 	}
 
 	return false;
-}
-
-void ABladeCharacter::NotifyAttack(const FHitResult& Hit, float AfterTime)
-{
-	/*FVector ImpactNormalWorld = (Hit.ImpactPoint - GetMesh()->GetBoneLocation(TEXT("spine_05"))).GetSafeNormal();
-	FVector ImpactNormal = GetMesh()->GetComponentTransform().InverseTransformVector(ImpactNormalWorld);
-	UKismetSystemLibrary::DrawDebugArrow(this, Hit.ImpactPoint, Hit.ImpactPoint + ImpactNormalWorld * 20, 5, FLinearColor::Red, 3, 1);
-	if (bParrying)
-	{
-		if (auto AnimInst = GetAnimInstance())
-		{
-			UAnimMontage* ParryAnim = nullptr;
-			float MaxDot = - 1;
-			for (const auto& Item : AnimInst->ParryAnimations)
-			{
-				float Dot = Item.Direction | ImpactNormal;
-				if (Dot > MaxDot)
-				{
-					MaxDot = Dot;
-					ParryAnim = Item.Montage;
-				}
-			}
-
-			if (ParryAnim)
-			{
-				PlayAction(ParryAnim);
-			}
-		}
-	}*/
 }
 
 UBladeAnimInstance* ABladeCharacter::GetAnimInstance() const
@@ -1319,7 +1235,7 @@ void ABladeCharacter::Dodge()
 	}
 }
 
-float ABladeCharacter::Attack(int InputIndex)
+void ABladeCharacter::Attack(int InputIndex)
 {
 	if(auto AnimInst = GetAnimInstance())
 	{
@@ -1331,26 +1247,20 @@ float ABladeCharacter::Attack(int InputIndex)
 				{
 					auto ActionAnim = CachedCommands[i].Animation;
 					CachedCommands.Empty();
-					CachedInputs.Empty();
-					PredictAttackHit(ActionAnim, 0);
-					float PlayLength = PlayAction(ActionAnim);
-					return PlayLength;
+					//PredictAttackHit(ActionAnim, 0);
+					PlayAction(ActionAnim);
+					return;
 				}
 			}
 
 			if(AnimInst->AttackAnimations.IsValidIndex(InputIndex) && AnimInst->AttackAnimations[InputIndex])
 			{
-				PredictAttackHit(AnimInst->AttackAnimations[InputIndex], 0);
-				return PlayAction(AnimInst->AttackAnimations[InputIndex]);
+				//PredictAttackHit(AnimInst->AttackAnimations[InputIndex], 0);
+				PlayAction(AnimInst->AttackAnimations[InputIndex]);
+				return;
 			}
 		}
-		else
-		{
-			CachedInputs.Add(InputRecord{ InputIndex, GetWorld()->GetTimeSeconds() });
-		}
 	}
-
-	return 0;
 }
 
 void ABladeCharacter::LeftAttack()
@@ -1397,143 +1307,4 @@ bool ABladeCharacter::CanBlock(const FVector& HitFromDir) const
 
 void ABladeCharacter::Execution()
 {
-	if (!bMoveAble) return;
-
-	ExecutionTarget = nullptr;
-	ExecutionIndex = -1;
-	FVector SelectDirection = GetInputVector().IsZero() ? GetActorForwardVector() : GetInputVector();
-	float MinDist = ExecutionDist;
-	for (ABladeCharacter* Pawn : TActorRange<ABladeCharacter>(GetWorld()))
-	{
-		if (Pawn != this && Pawn->IsExcuteable())
-		{
-			FVector PawnVector = Pawn->GetActorLocation() - GetActorLocation();
-			float Angle = PawnVector.GetSafeNormal2D() | GetActorForwardVector();
-			float Dist = PawnVector.Size();
-			if (Angle > FMath::Cos(ExecutionAngle) && Dist < ExecutionDist)
-			{
-				if (Dist < MinDist)
-				{
-					MinDist = Dist;
-					ExecutionTarget = Pawn;
-				}
-			}
-		}
-	}
-
-	if (ExecutionTarget && ExecutionTarget->GetMesh()->GetSkeletalMeshAsset())
-	{
-		FTransform TargetOnLocal = ExecutionTarget->GetActorTransform().GetRelativeTransform(GetActorTransform());
-	
-		float MaxWeight = 0;
-		const auto& ExecutionAnimations = GetAnimInstance()->ExecutionAnimations;
-		for (int i = 0; i < ExecutionAnimations.Num(); i++)
-		{
-			const auto& Val = ExecutionAnimations[i];
-			if (Val.ExecutedAnimation && Val.ExecutionAnimation && Val.ExecutedAnimation->GetSkeleton() == ExecutionTarget->GetMesh()->GetSkeletalMeshAsset()->GetSkeleton())
-			{
-				FTransform TargetOffset = GetAnimationBoneTransform(Val.ExecutedAnimation, 0, 0);
-				TargetOffset = ConvertLocalRootMotionToWorld(TargetOffset, ExecutionTarget->GetMesh()->GetRelativeTransform());
-				FTransform SelfOffset = GetAnimationBoneTransform(Val.ExecutionAnimation, 0, 0);
-				SelfOffset = ConvertLocalRootMotionToWorld(SelfOffset, GetMesh()->GetRelativeTransform());
-				
-				const FTransform TargetOnSelf = TargetOffset.GetRelativeTransform(SelfOffset);
-				float Dist = (TargetOnLocal.GetLocation() - TargetOnSelf.GetLocation()).Size();
-				float Weight = FMath::Max(100 - Dist, 0) * (1+(TargetOnLocal.GetUnitAxis(EAxis::X) | TargetOnSelf.GetUnitAxis(EAxis::X)));
-				if (Weight > MaxWeight)
-				{
-					MaxWeight = Weight;
-					ExecutionIndex = i;
-				}	
-
-				if (Val.bDebugDraw)
-				{
-					FTransform TargetOnWorld = TargetOnSelf * GetActorTransform();
-					DrawDebugCapsule(GetWorld(), TargetOnWorld.GetLocation(),
-						GetCapsuleComponent()->GetScaledCapsuleHalfHeight(),
-						GetCapsuleComponent()->GetScaledCapsuleRadius(),
-						TargetOnWorld.GetRotation(), FColor::Red, false, 5);
-					DrawDebugDirectionalArrow(GetWorld(), TargetOnWorld.GetLocation(), TargetOnWorld.TransformPosition(FVector(60, 0, 0)), 20, FColor::Green, false, 5, 0, 3);
-				}
-			}
-		}
-
-		if (ExecutionIndex != -1)
-		{
-			FVector ExecutionLoction = ExecutionTarget->GetActorLocation();
-			FVector ExecutionDirection = (ExecutionTarget->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
-
-			FTransform SelfTransform(ExecutionDirection.Rotation(), ExecutionLoction);
-			ExecutionTransform = SelfTransform;
-			FTransform TargetOffset = GetAnimationBoneTransform(ExecutionAnimations[ExecutionIndex].ExecutedAnimation, 0, 0);
-			TargetOffset = ConvertLocalRootMotionToWorld(TargetOffset, ExecutionTarget->GetMesh()->GetRelativeTransform());
-			FTransform TargetTransform = TargetOffset * SelfTransform;
-			ExecutionTarget->SmoothTeleport(TargetTransform.GetLocation(), TargetTransform.Rotator(), 0.2);
-			ExecutionTarget->GetCapsuleComponent()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Ignore);
-
-			FTransform SelfOffset = GetAnimationBoneTransform(ExecutionAnimations[ExecutionIndex].ExecutionAnimation, 0, 0);
-			SelfOffset = ConvertLocalRootMotionToWorld(SelfOffset, GetMesh()->GetRelativeTransform());
-			SelfTransform = SelfOffset * SelfTransform;
-			SmoothTeleport(SelfTransform.GetLocation(), SelfTransform.Rotator(), 0.2);
-			PlayAction(ExecutionAnimations[ExecutionIndex].ExecutionAnimation,
-				[this](UAnimMontage* Montage, bool bInterrupted) {
-					bMoveAble = true;
-					ExecutionTarget = nullptr;
-					ExecutionIndex = -1;
-				});
-
-			bMoveAble = false;
-			ExecutionTarget->PlayAction(ExecutionAnimations[ExecutionIndex].ExecutedAnimation,
-				[ch = ExecutionTarget](UAnimMontage* Montage, bool bInterrupted) {
-					ch->bMoveAble = true;
-				});
-
-			ExecutionTarget->bMoveAble = false;
-		}
-		else
-			ExecutionTarget = nullptr;
-	}
-}
-
-void ABladeCharacter::TickExecution()
-{
-	if (auto AnimInst = GetAnimInstance())
-	{
-		if (ExecutionTarget && ExecutionTarget->IsRagdoll() == false && ExecutionIndex != INDEX_NONE )
-		{
-			const auto& ExecutionData = AnimInst->ExecutionAnimations[ExecutionIndex];
-			if (auto* MontageInst = AnimInst->GetActiveMontageInstance())
-			{
-				float PlayPosition = MontageInst->GetPosition();
-				if (PlayPosition > MontageInst->Montage->GetDefaultBlendInTime())
-				{
-					const FTransform OtherCompTM = ExecutionTarget->GetMesh()->GetComponentTransform();
-					const FTransform SelfCompTM = GetMesh()->GetComponentTransform();
-					const FTransform SelfRootTransform = GetAnimationBoneTransform(ExecutionData.ExecutionAnimation, 0, PlayPosition);
-					const FTransform OtherRootTransform = GetAnimationBoneTransform(ExecutionData.ExecutedAnimation, 0, PlayPosition);
-					const FTransform OtherOnSelf = ConvertLocalRootMotionToWorld(
-						OtherRootTransform.GetRelativeTransform(SelfRootTransform), ExecutionTarget->GetMesh()->GetRelativeTransform());
-			
-					const FTransform TargetTransform = OtherOnSelf * GetActorTransform();
-					const FVector TargetLocation = ExecutionTarget->GetActorLocation();
-					FVector Delta = TargetTransform.GetLocation() - TargetLocation;
-					if (Delta.Size() > 1)
-					{
-						FHitResult Hit(1.f);
-						ExecutionTarget->GetCharacterMovement()->SafeMoveUpdatedComponent(Delta, TargetTransform.GetRotation(), true, Hit);
-					}
-
-					const FTransform SelfOnOther = OtherOnSelf.Inverse();
-					FTransform SelfTransform = SelfOnOther * ExecutionTarget->GetActorTransform();
-					FVector SelfLocation = GetActorLocation();
-					Delta = SelfTransform.GetLocation() - SelfLocation;
-					if (Delta.Size() > 1)
-					{
-						FHitResult Hit(1.f);
-						GetCharacterMovement()->SafeMoveUpdatedComponent(SelfTransform.GetLocation() - SelfLocation, SelfTransform.GetRotation(), true, Hit);
-					}
-				}
-			}
-		}
-	}
 }

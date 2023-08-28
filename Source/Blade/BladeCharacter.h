@@ -55,8 +55,6 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
-	void ExecutedCachedInput();
-
 	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
 
@@ -115,10 +113,17 @@ public:
 	UFUNCTION(BlueprintImplementableEvent)
 	void OnDead();
 
-	float PlayAction(UAnimSequenceBase* Montage);
+	UFUNCTION(BlueprintCallable)
+	void PlayAction(UAnimMontage* Montage);
 
-	template<typename F>
-	float PlayAction(UAnimMontage* AnimSeq, F Func);
+	UFUNCTION(BlueprintCallable)
+	void PlayMontage(UAnimMontage* Montage);
+
+	UFUNCTION(BlueprintCallable, Server, Unreliable)
+	void ServerPlayAction(UAnimMontage* Montage);
+
+	UFUNCTION(BlueprintCallable, NetMulticast, Unreliable)
+	void MultiPlayAction(UAnimMontage* Montage);
 
 	UFUNCTION(BlueprintCallable)
 	bool IsAttacking() const;
@@ -135,9 +140,6 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	bool IsWeaponSweeping(UAnimSequenceBase* Animation, int WeaponIndex, float Time) const;
-
-	UFUNCTION(BlueprintCallable)
-	void NotifyAttack(const FHitResult& Hit, float AfterTime);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray <FWeaponSlot>			WeaponSlots;
@@ -203,7 +205,7 @@ public:
 	void Dodge();
 
 	UFUNCTION(BlueprintCallable)
-	float Attack(int Index);
+	void Attack(int Index);
 
 	UFUNCTION(BlueprintCallable)
 	void LeftAttack();
@@ -228,8 +230,6 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, Transient)
 	TObjectPtr<ABladeCharacter> ExecutionTarget = nullptr;
-
-	void TickExecution();
 
 	UPROPERTY(BlueprintReadWrite, Transient)
 	int ExecutionIndex = -1;
@@ -336,13 +336,6 @@ protected:
 
 	UPROPERTY(BlueprintReadWrite, Transient)
 	TArray<FActionCommand>                CachedCommands;
-
-	struct InputRecord
-	{
-		int		Index = 0;
-		double	Time = 0;
-	};
-	TArray<InputRecord>					  CachedInputs;
 
 	FOnMontageEnded						  MontageEndedDelegate;
 

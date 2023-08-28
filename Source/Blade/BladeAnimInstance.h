@@ -161,18 +161,18 @@ public:
 	UAnimSequence* Falling;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
-	TArray<UAnimSequenceBase*>	AttackAnimations;
+	TArray<UAnimMontage*>	AttackAnimations;
 
 	/** front 0,right 1, back 2, left 3 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
-	TArray<UAnimSequence*>	Hits;
+	TArray<UAnimMontage*>	Hits;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
-	TArray<UAnimSequence*>	Deads;
+	TArray<UAnimMontage*>	Deads;
 
 	/** eight Direction clockwise 0~8 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
-	TArray<UAnimSequence*>	Dodges;
+	TArray<UAnimMontage*>	Dodges;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
 	UAnimMontage*			Block;

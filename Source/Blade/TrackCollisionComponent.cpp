@@ -56,7 +56,6 @@ void UTrackCollisionComponent::OnUpdateTransform(EUpdateTransformFlags UpdateTra
 			{
 				if (!IgnoreComponents.Contains(Hits[j].GetComponent()))
 				{
-					//Weapon->OnWeaponHit(this, Hits[j].GetActor(), Hits[j].GetComponent(), (Hits[j].TraceEnd - Hits[j].TraceStart).GetSafeNormal(), Hits[j]);
 					OnComponentHit.Broadcast(this, Hits[j].GetActor(), Hits[j].GetComponent(),(Hits[j].TraceEnd - Hits[j].TraceStart).GetSafeNormal(), Hits[j]);
 					Hits[j].GetComponent()->OnComponentHit.Broadcast(Hits[j].GetComponent(), GetOwner(), this, (Hits[j].TraceEnd - Hits[j].TraceStart).GetSafeNormal(), Hits[j]);
 					IgnoreComponents.Add(Hits[j].GetComponent());
