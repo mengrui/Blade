@@ -717,20 +717,20 @@ void ABladeCharacter::LookAt(const FInputActionValue& Value)
 	AddControllerPitchInput(MouseDelta.Y * TurnRateGamepad * GetWorld()->GetDeltaSeconds());
 }
 
-void ABladeCharacter::PlayAction(UAnimMontage* Montage)
+void ABladeCharacter::PlayAction(UAnimMontage* Montage, bool bDisableRootMotion)
 {
 	if (GetLocalRole() == ROLE_AutonomousProxy)
 	{
-		PlayMontage(Montage);
-		ServerPlayAction(Montage);
+		PlayMontage(Montage, bDisableRootMotion);
+		ServerPlayAction(Montage, bDisableRootMotion);
 	}
 	else if (GetLocalRole() == ROLE_Authority)
 	{
-		MultiPlayAction(Montage);
+		MultiPlayAction(Montage, bDisableRootMotion);
 	}
 }
 
-void ABladeCharacter::PlayMontage(UAnimMontage* AnimMontage)
+void ABladeCharacter::PlayMontage(UAnimMontage* AnimMontage, bool bDisableRootMotion)
 {
 	if (auto AnimInst = GetAnimInstance())
 	{
@@ -738,25 +738,30 @@ void ABladeCharacter::PlayMontage(UAnimMontage* AnimMontage)
 		{
 			bMoveAble = false;
 		}
-	
-		/*if (auto MontageInst = AnimInst->GetActiveInstanceForMontage(AnimMontage))
+
+		if (auto MontageInst = AnimInst->GetActiveInstanceForMontage(AnimMontage))
 		{
-			MontageInst->Advance(0.001, nullptr, false);
-			AnimInst->TriggerAnimNotifies(0.001);
-		}*/
+			//MontageInst->Advance(0.001, nullptr, false);
+			//AnimInst->TriggerAnimNotifies(0.001);
+
+			if (bDisableRootMotion)
+			{
+				MontageInst->PushDisableRootMotion();
+			}
+		}
 	}
 }
 
-void ABladeCharacter::ServerPlayAction_Implementation(UAnimMontage* Montage)
+void ABladeCharacter::ServerPlayAction_Implementation(UAnimMontage* Montage, bool bDisableRootMotion)
 {
-	MultiPlayAction(Montage);
+	MultiPlayAction(Montage, bDisableRootMotion);
 }
 
-void ABladeCharacter::MultiPlayAction_Implementation(UAnimMontage* Montage)
+void ABladeCharacter::MultiPlayAction_Implementation(UAnimMontage* Montage, bool bDisableRootMotion)
 {
 	if (GetLocalRole() != ROLE_AutonomousProxy)
 	{
-		PlayMontage(Montage);
+		PlayMontage(Montage, bDisableRootMotion);
 	}
 }
 
@@ -1239,39 +1244,28 @@ void ABladeCharacter::Attack(int InputIndex)
 {
 	if(auto AnimInst = GetAnimInstance())
 	{
-		if (bMoveAble && GetCharacterMovement()->IsWalking())
+		if (GetCharacterMovement()->IsWalking())
 		{
+			UAnimMontage* AttackAnim = nullptr;
 			for (int i = 0; i < CachedCommands.Num(); i++)
 			{
 				if (CachedCommands[i].InputIndex == InputIndex)
 				{
-					auto ActionAnim = CachedCommands[i].Animation;
+					AttackAnim = CachedCommands[i].Animation;
 					CachedCommands.Empty();
-					//PredictAttackHit(ActionAnim, 0);
-					PlayAction(ActionAnim);
-					return;
+					break;
 				}
 			}
 
-			if(AnimInst->AttackAnimations.IsValidIndex(InputIndex) && AnimInst->AttackAnimations[InputIndex])
+			if(bMoveAble && AnimInst->AttackAnimations.IsValidIndex(InputIndex) && AnimInst->AttackAnimations[InputIndex])
 			{
-				//PredictAttackHit(AnimInst->AttackAnimations[InputIndex], 0);
-				PlayAction(AnimInst->AttackAnimations[InputIndex]);
-				return;
+				AttackAnim = AnimInst->AttackAnimations[InputIndex];
 			}
+
+			if(AttackAnim) 	
+				PlayAction(AttackAnim, true);
 		}
 	}
-}
-
-void ABladeCharacter::LeftAttack()
-{
-	FVector InputVector = GetInputMove();
-	int AttackIndex = InputVector.IsZero() ? 0 : FRotator::ClampAxis(InputVector.ToOrientationRotator().Yaw + 45) / 90 + 1;
-	Attack(AttackIndex);
-}
-
-void ABladeCharacter::RightAttack()
-{
 }
 
 void ABladeCharacter::Block(const FInputActionValue& ActionValue)

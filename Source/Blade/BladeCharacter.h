@@ -114,16 +114,16 @@ public:
 	void OnDead();
 
 	UFUNCTION(BlueprintCallable)
-	void PlayAction(UAnimMontage* Montage);
+	void PlayAction(UAnimMontage* Montage, bool bDisableRootMotion = false);
 
 	UFUNCTION(BlueprintCallable)
-	void PlayMontage(UAnimMontage* Montage);
+	void PlayMontage(UAnimMontage* Montage, bool bDisableRootMotion);
 
 	UFUNCTION(BlueprintCallable, Server, Unreliable)
-	void ServerPlayAction(UAnimMontage* Montage);
+	void ServerPlayAction(UAnimMontage* Montage, bool bDisableRootMotion);
 
 	UFUNCTION(BlueprintCallable, NetMulticast, Unreliable)
-	void MultiPlayAction(UAnimMontage* Montage);
+	void MultiPlayAction(UAnimMontage* Montage, bool bDisableRootMotion);
 
 	UFUNCTION(BlueprintCallable)
 	bool IsAttacking() const;
@@ -206,12 +206,6 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void Attack(int Index);
-
-	UFUNCTION(BlueprintCallable)
-	void LeftAttack();
-
-	UFUNCTION(BlueprintCallable)
-	void RightAttack();
 
 	UFUNCTION(BlueprintCallable)
 	void Block(const FInputActionValue& ActionValue);
