@@ -12,6 +12,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "BladeAnimInstance.h"
 #include "Engine/DamageEvents.h"
@@ -869,19 +870,20 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, int WeaponI
 					WeaponTransform = SelfCollision->GetRelativeTransform() * WeaponTransform;
 				}
 
-				HitCharater->PlayParryAnim(SelfCollision->GetCollisionShape(), SelfWeaponTransforms, StartFrame * TimeStep, bSweepAttack);
+				HitCharater->PlayParryAnim(SelfCollision, SelfWeaponTransforms, StartFrame * TimeStep, bSweepAttack);
 			}
 		}
 	}
 }
 
-void ABladeCharacter::PlayParryAnim(const FCollisionShape& AttackShape, const TArray<FTransform>& AttackShapeTracks, float StartTime, bool bSweep)
+void ABladeCharacter::PlayParryAnim(UPrimitiveComponent* PrimitiveComponent, const TArray<FTransform>& AttackShapeTracks, float StartTime, bool bSweep)
 {
-	if (AttackShapeTracks.IsEmpty()) return;
+	if (AttackShapeTracks.IsEmpty() || !PrimitiveComponent) return;
 
 	if (auto AnimInst = GetAnimInstance())
 	{
 		const float TimeStep = 1.0 / 60;
+		const FCollisionShape AttackShape = PrimitiveComponent->GetCollisionShape();
 		const auto& ParryAnimations = AnimInst->ParryAnimations;
 		for (int WeaponIndex = 0; WeaponIndex < WeaponSlots.Num(); WeaponIndex++)
 		{
@@ -984,11 +986,11 @@ void ABladeCharacter::PlayParryAnim(const FCollisionShape& AttackShape, const TA
 						}
 						else
 						{
-							FTransform ParryLastTransform = ParryWeaponTrack[0];
+							FTransform ParryLastTransform = CollisionLocalTransform * ParryWeaponTrack[0];
 
 							for (int k = 1; k < ParryEndFrame; k++)
 							{
-								FTransform ParryCurTransform = ParryWeaponTrack[k];
+								FTransform ParryCurTransform = CollisionLocalTransform * ParryWeaponTrack[k];
 								FHitResult ParryHit;
 								FVector ParryDirection = ParryCurTransform.GetLocation() - ParryLastTransform.GetLocation();
 								FVector ImpactLoc, ImpactNorm;
@@ -1038,6 +1040,21 @@ void ABladeCharacter::PlayParryAnim(const FCollisionShape& AttackShape, const TA
 			}
 		}
 	}
+}
+
+void ABladeCharacter::ParryProject(UPrimitiveComponent* PrimitiveComponent, class UProjectileMovementComponent* ProjectComponent)
+{
+	FVector StartPosition = PrimitiveComponent->GetComponentLocation();
+	FQuat StartRotation = PrimitiveComponent->GetComponentQuat();
+	FVector Velocity = ProjectComponent->Velocity;
+	float TimeStep = 1.0 / 60;
+	TArray<FTransform> Track;
+	for (int i = 0; i < 1000; i ++)
+	{
+		Track.Add(FTransform(StartRotation, StartPosition + Velocity * TimeStep * i));
+	}
+
+	PlayParryAnim(PrimitiveComponent, Track, 0, false);
 }
 
 int32 ABladeCharacter::GetWeaponBoneIndex(int WeaponIndex) const
