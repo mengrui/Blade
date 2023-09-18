@@ -124,7 +124,7 @@ extern bool SweepCheck(const FCollisionShape& A, const FTransform& TransformA, c
 	int32 FaceIdx;
 	Chaos::FVec3 FaceNormal;
 	if (Chaos::Utilities::CastHelper(ShapeAdapterB.GetGeometry(), TransformA, [&](const auto& Downcast, const auto& ATM)
-		{ return Chaos::SweepQuery(ShapeAdapterA.GetGeometry(), ATM, Downcast, TransformB, MovedB.GetSafeNormal(), MovedB.Size(), Distance, WorldPosition, WorldNormal, FaceIdx, FaceNormal, 0.f, false); }))
+		{ return Chaos::SweepQuery(ShapeAdapterA.GetGeometry(), ATM, Downcast, TransformB, MovedB.GetSafeNormal(), MovedB.Size(), Distance, WorldPosition, WorldNormal, FaceIdx, FaceNormal, 0.f, true); }))
 	{
 		HitLocation = WorldPosition;
 		HitNormal = WorldNormal;

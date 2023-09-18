@@ -1042,21 +1042,126 @@ void ABladeCharacter::PlayParryAnim(UPrimitiveComponent* PrimitiveComponent, con
 	}
 }
 
+#pragma optimize("", off)
 void ABladeCharacter::ParryProject(UPrimitiveComponent* PrimitiveComponent, class UProjectileMovementComponent* ProjectComponent)
 {
 	FVector StartPosition = PrimitiveComponent->GetComponentLocation();
-	FQuat StartRotation = PrimitiveComponent->GetComponentQuat();
 	FVector Velocity = ProjectComponent->Velocity;
-	float TimeStep = 1.0 / 60;
-	TArray<FTransform> Track;
-	for (int i = 0; i < 1000; i ++)
+	if (Velocity.IsNearlyZero()) return;
+
+	//PlayParryAnim(PrimitiveComponent, Track, 0, false);
+	float HalfCapsuleHeight = (GetActorLocation() - StartPosition).Size() * 0.5f + 50;
+	float HalfCapsuleRadius = PrimitiveComponent->GetCollisionShape().GetSphereRadius();
+	FVector CapsuleLocation = StartPosition + Velocity.GetSafeNormal()* HalfCapsuleHeight;
+	auto CapsuleRotation = FRotationMatrix::MakeFromZX(Velocity.GetSafeNormal(), FVector::UpVector).Rotator();
+	FTransform CapsuleTransform(CapsuleRotation, CapsuleLocation);
+	UKismetSystemLibrary::DrawDebugCapsule(this, CapsuleLocation, HalfCapsuleHeight, HalfCapsuleRadius, CapsuleRotation, FLinearColor::Blue, 3);
+
+	FCollisionShape AttackShape;
+	AttackShape.SetCapsule(HalfCapsuleRadius,HalfCapsuleHeight);
+
+	if (auto AnimInst = GetAnimInstance())
 	{
-		Track.Add(FTransform(StartRotation, StartPosition + Velocity * TimeStep * i));
+		const float TimeStep = 1.0 / 60;
+		const auto& ParryAnimations = AnimInst->ParryAnimations;
+		for (int WeaponIndex = 0; WeaponIndex < WeaponSlots.Num(); WeaponIndex++)
+		{
+			auto Weapon = WeaponSlots[WeaponIndex].Weapon;
+			if (!Weapon->Mesh->GetSkeletalMeshAsset())
+				continue;
+
+			int32 WeaponBoneIndex = GetWeaponBoneIndex(WeaponIndex);
+			FName WeaponBoneName = GetMesh()->GetBoneName(WeaponBoneIndex);
+			FTransform SocketLocalTransform = GetMesh()->GetSocketTransform(WeaponSlots[WeaponIndex].AttachSocketName).GetRelativeTransform(GetMesh()->GetBoneTransform(WeaponBoneIndex));
+			FTransform RootTransform = GetMesh()->GetBoneTransform(0);
+			TArray<UTrackCollisionComponent*> WeaponCollisionComponents;
+			Weapon->GetComponents(WeaponCollisionComponents);
+			if (WeaponCollisionComponents.IsEmpty())
+				continue;
+
+			for (int i = 0; i < ParryAnimations.Num(); i++)
+			{
+				UAnimMontage* ParryAnim = ParryAnimations[i];
+				FTransform ParryRefTransform = GetAnimationBoneTransform(ParryAnim, 0, 0);
+				FTransform ParryAnimToWorld = ParryRefTransform.Inverse() * RootTransform;
+
+				FAnimNotifyContext NotifyContext;
+				ParryAnim->GetAnimNotifies(0, ParryAnim->GetPlayLength(), NotifyContext);
+				float ParryStartTime = 0, ParryEndTime = ParryAnim->GetPlayLength();
+				for (auto& NotifieRef : NotifyContext.ActiveNotifies)
+				{
+					if (NotifieRef.GetNotify()->NotifyName == TEXT("ParryState_C"))
+					{
+						ParryStartTime = NotifieRef.GetNotify()->GetTriggerTime();
+						ParryEndTime = NotifieRef.GetNotify()->GetEndTriggerTime();
+					}
+				}
+				int ParryStartFrame = FMath::RoundToInt(ParryStartTime / TimeStep);
+				int ParryEndFrame = FMath::RoundToInt(ParryEndTime / TimeStep);
+
+				TArray<FTransform> WeaponBoneTransforms;
+				GetBoneTrackData(ParryAnim, WeaponBoneName, WeaponBoneTransforms);
+
+				for (auto CollisionComponent : WeaponCollisionComponents)
+				{
+					FTransform ParryLastTransform;
+					for (int ParryFrame = ParryStartFrame; ParryFrame <= ParryEndFrame; ParryFrame++)
+					{
+						FTransform HandBoneTransform = WeaponBoneTransforms.IsEmpty() ? GetAnimationBoneTransform(ParryAnim, WeaponBoneIndex, ParryFrame * TimeStep) : WeaponBoneTransforms[ParryFrame];
+						FTransform ParryTransform = SocketLocalTransform * HandBoneTransform * ParryAnimToWorld;
+
+						auto ParryShape = CollisionComponent->GetCollisionShape();
+						FTransform CollisionLocalTransform = CollisionComponent->GetRelativeTransform();
+
+						FTransform ParryCurTransform = CollisionLocalTransform * ParryTransform;
+
+						if (ParryFrame != ParryStartFrame)
+						{
+							FHitResult ParryHit;
+							FVector ParryDirection = ParryCurTransform.GetLocation() - ParryLastTransform.GetLocation();
+
+							FVector ImpactLoc, ImpactNorm;
+							if (SweepCheck(AttackShape, CapsuleTransform, ParryShape, ParryLastTransform, ParryDirection, ImpactLoc, ImpactNorm))
+							{
+								float ParryedAnimTime = ParryFrame * TimeStep;
+								float ProjectTime = (ImpactLoc - StartPosition).Size()/Velocity.Size();
+								float DelayTime = ProjectTime - ParryedAnimTime;
+
+								if (DelayTime > 0)
+								{
+									FTimerHandle TimerHandle;
+									GetWorldTimerManager().SetTimer(TimerHandle,
+										FSimpleDelegate::CreateWeakLambda(this, [this, ParryAnim]() { PlayAction(ParryAnim); }), DelayTime, false);
+
+									FTimerHandle TimerHandle2;
+									GetWorldTimerManager().SetTimer(TimerHandle2,
+										FSimpleDelegate::CreateWeakLambda(this, [this, CollisionComponent]()
+										{
+												UKismetSystemLibrary::DrawDebugBox(this, CollisionComponent->GetComponentLocation(), CollisionComponent->GetCollisionShape().GetExtent(), FLinearColor::Yellow, CollisionComponent->GetComponentRotation(), 3);
+										}),
+										ProjectTime, false);
+
+									TArray<AActor*> IgnoreActors;
+									FHitResult Hit;
+									UKismetSystemLibrary::BoxTraceSingle(this,
+										ParryLastTransform.GetLocation(), ParryCurTransform.GetLocation(),
+										ParryShape.GetExtent(), ParryCurTransform.Rotator(), ETraceTypeQuery::TraceTypeQuery1,
+										false, IgnoreActors, EDrawDebugTrace::ForDuration, Hit, true, FLinearColor::Green);
+									//UKismetSystemLibrary::DrawDebugBox(this, ParryCurTransform.GetLocation(), ParryShape.GetExtent(), FLinearColor::Green, ParryCurTransform.Rotator(), 6);
+									UKismetSystemLibrary::DrawDebugSphere(this, StartPosition + Velocity * ProjectTime, HalfCapsuleRadius, 12, FLinearColor::Red, 3);
+									return;
+								}
+							}
+						}
+
+						ParryLastTransform = ParryCurTransform;
+					}
+				}
+			}
+		}
 	}
-
-	PlayParryAnim(PrimitiveComponent, Track, 0, false);
 }
-
+#pragma optimize("", on)
 int32 ABladeCharacter::GetWeaponBoneIndex(int WeaponIndex) const
 {
 	FName AttachBoneName = WeaponSlots[WeaponIndex].AttachSocketName;
