@@ -1051,7 +1051,7 @@ void ABladeCharacter::ParryProject(UPrimitiveComponent* PrimitiveComponent, clas
 
 	//PlayParryAnim(PrimitiveComponent, Track, 0, false);
 	float HalfCapsuleHeight = (GetActorLocation() - StartPosition).Size() * 0.5f + 50;
-	float HalfCapsuleRadius = PrimitiveComponent->GetCollisionShape().GetSphereRadius();
+	float HalfCapsuleRadius = 0.01;//PrimitiveComponent->GetCollisionShape().GetSphereRadius();
 	FVector CapsuleLocation = StartPosition + Velocity.GetSafeNormal()* HalfCapsuleHeight;
 	auto CapsuleRotation = FRotationMatrix::MakeFromZX(Velocity.GetSafeNormal(), FVector::UpVector).Rotator();
 	FTransform CapsuleTransform(CapsuleRotation, CapsuleLocation);
@@ -1135,9 +1135,10 @@ void ABladeCharacter::ParryProject(UPrimitiveComponent* PrimitiveComponent, clas
 
 									FTimerHandle TimerHandle2;
 									GetWorldTimerManager().SetTimer(TimerHandle2,
-										FSimpleDelegate::CreateWeakLambda(this, [this, CollisionComponent]()
+										FSimpleDelegate::CreateWeakLambda(CollisionComponent, [CollisionComponent, ProjectComponent, ImpactNorm]()
 										{
-												UKismetSystemLibrary::DrawDebugBox(this, CollisionComponent->GetComponentLocation(), CollisionComponent->GetCollisionShape().GetExtent(), FLinearColor::Yellow, CollisionComponent->GetComponentRotation(), 3);
+											ProjectComponent->Velocity = ImpactNorm * ProjectComponent->Velocity.Size();
+											UKismetSystemLibrary::DrawDebugBox(CollisionComponent, CollisionComponent->GetComponentLocation(), CollisionComponent->GetCollisionShape().GetExtent(), FLinearColor::Yellow, CollisionComponent->GetComponentRotation(), 3);
 										}),
 										ProjectTime, false);
 
@@ -1148,7 +1149,7 @@ void ABladeCharacter::ParryProject(UPrimitiveComponent* PrimitiveComponent, clas
 										ParryShape.GetExtent(), ParryCurTransform.Rotator(), ETraceTypeQuery::TraceTypeQuery1,
 										false, IgnoreActors, EDrawDebugTrace::ForDuration, Hit, true, FLinearColor::Green);
 									//UKismetSystemLibrary::DrawDebugBox(this, ParryCurTransform.GetLocation(), ParryShape.GetExtent(), FLinearColor::Green, ParryCurTransform.Rotator(), 6);
-									UKismetSystemLibrary::DrawDebugSphere(this, StartPosition + Velocity * ProjectTime, HalfCapsuleRadius, 12, FLinearColor::Red, 3);
+									UKismetSystemLibrary::DrawDebugSphere(this, StartPosition + Velocity * ProjectTime, PrimitiveComponent->GetCollisionShape().GetSphereRadius(), 12, FLinearColor::Red, 3);
 									return;
 								}
 							}
