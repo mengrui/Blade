@@ -12,6 +12,8 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Animation/AnimNode_SequencePlayer.h"
 #include "BladeUtility.h"
+#include "AnimNodes/AnimNode_SequenceEvaluator.h"
+#include "AnimCharacterMovementLibrary.h"
 
 FName DefaultSlot = FName(TEXT("DefaultSlot"));
 
@@ -49,7 +51,12 @@ void UBladeAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	Acceleration = MovementComponent->GetCurrentAcceleration();
 	FVector AccelDir = Acceleration.GetSafeNormal2D();
 	FVector LocalAccelVector = ActorTransform.InverseTransformVector(AccelDir);
-	Strafe = MovementMode == EMovementMode::MOVE_None ? FVector2D::ZeroVector : FVector2D(LocalAccelVector);
+	//Strafe = MovementMode == EMovementMode::MOVE_None ? FVector2D::ZeroVector : FVector2D(LocalAccelVector);
+	FVector LocalVelDir = ActorTransform.InverseTransformVector(Velocity).GetSafeNormal2D();
+	DirectionIndex = FRotator::ClampAxis(LocalVelDir.ToOrientationRotator().Yaw + 45) / 90;
+	LocalVelDir = LocalVelDir /FMath::Max(FMath::Abs(LocalVelDir.X), FMath::Abs(LocalVelDir.Y));
+	LocalVelDir *= Speed / MovementComponent->GetMaxSpeed();
+	Strafe = FVector2D(LocalVelDir);
 	IsMoveForward = (LocalAccelVector | FVector(1, 0, 0)) > 0.99f;
 	IsPlayingRootMotion = GetRootMotionMontageInstance() && !GetRootMotionMontageInstance()->IsRootMotionDisabled();
 	bInputMove = !Acceleration.IsZero() && !IsPlayingRootMotion;
@@ -155,5 +162,87 @@ void UBladeAnimInstance::UpdateTurnInplace(const FAnimUpdateContext& UpdateConte
 			TurnInplaceYawOffset += DeltaTransform.Rotator().Yaw;
 			//UKismetSystemLibrary::PrintString(GetOwningActor(), FString::Printf(TEXT("TurnInplaceYawOffset:   %f"), TurnInplaceYawOffset), false, true);
 		}
+	}
+}
+
+void UBladeAnimInstance::BeginStop(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference)
+{
+	FAnimNode_SequenceEvaluator* SequenceEvaluator = AnimNodeReference.GetAnimNodePtr<FAnimNode_SequenceEvaluator>();
+	if (SequenceEvaluator)
+	{
+		bool bLeftFootUp = GetOwningComponent()->GetBoneLocation(TEXT("foot_l")).Z > GetOwningComponent()->GetBoneLocation(TEXT("foot_r")).Z;
+		const auto& StopAnims = bLeftFootUp? StrafeStopLU : StrafeStopRU;
+		if (StopAnims.IsValidIndex(DirectionIndex))
+		{
+			SequenceEvaluator->SetSequence(StopAnims[DirectionIndex]);
+		}
+
+		SequenceEvaluator->SetExplicitTime(0);
+
+		const ACharacter* Character = Cast<ACharacter>(GetOwningActor());
+		const UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement();
+
+		FVector StopLocation = UAnimCharacterMovementLibrary::PredictGroundMovementStopLocation(
+			MovementComponent->Velocity,
+			MovementComponent->bUseSeparateBrakingFriction,
+			MovementComponent->BrakingFriction,
+			MovementComponent->GroundFriction,
+			MovementComponent->BrakingFrictionFactor,
+			MovementComponent->BrakingDecelerationWalking);
+
+		StopDistRemain = StopLocation.Size2D();
+
+		//UKismetSystemLibrary::DrawDebugSphere(GetOwningComponent(), CurrentLocation + StopLocation, 5, 12, FLinearColor::Red, 5, 1);
+	}
+}
+
+void UBladeAnimInstance::UpdateStop(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference)
+{
+	FAnimNode_SequenceEvaluator* SequenceEvaluator = AnimNodeReference.GetAnimNodePtr<FAnimNode_SequenceEvaluator>();
+	;
+	if (UAnimSequence* StopAnim = Cast<UAnimSequence>(SequenceEvaluator->GetSequence()))
+	{
+		float DeltaSeconds = UpdateContext.GetContext()->GetDeltaTime();
+		float ExplicitTime = SequenceEvaluator->GetExplicitTime();
+		float NewAnimTime = ExplicitTime;
+		StopDistRemain = FMath::Max(StopDistRemain - Speed * DeltaSeconds, 0);
+		if (Speed == 0 || StopDistRemain == 0)
+			NewAnimTime += DeltaSeconds;
+		else
+		{
+			float PredictedStopDist = StopDistRemain;
+
+			float LastTime = 0;
+			float LastDist = 0;
+			FVector AnimStopRootPosition = StopAnim->ExtractRootMotionFromRange(0, StopAnim->GetPlayLength()).GetLocation();
+			for (float SampleTime = 0; SampleTime <= StopAnim->GetPlayLength(); SampleTime += 1.f / 30)
+			{
+				FVector CurRootPos = StopAnim->ExtractRootMotionFromRange(0, SampleTime).GetLocation();
+				float CurDist = FVector::Dist2D(AnimStopRootPosition, CurRootPos);
+				if (SampleTime == 0)
+					LastDist = CurDist;
+
+				if (CurDist <= PredictedStopDist)
+				{
+					if (CurDist < PredictedStopDist && LastDist > PredictedStopDist)
+					{
+						NewAnimTime = FMath::Lerp(SampleTime, LastTime, (PredictedStopDist - CurDist) / (LastDist - CurDist));
+					}
+					else
+						NewAnimTime = SampleTime;
+
+					break;
+				}
+
+				LastTime = SampleTime;
+				LastDist = CurDist;
+			}
+		}
+
+		//if (ExplicitTime != 0)
+		//	NewAnimTime = FMath::Clamp(NewAnimTime, ExplicitTime + 0.7 * DeltaSeconds, ExplicitTime + DeltaSeconds * 2);
+
+		SequenceEvaluator->SetExplicitTime(NewAnimTime);
+		//UKismetSystemLibrary::PrintString(GetOwningActor(), FString::Printf(TEXT("StopAnimTime: %f  StopDistRemain: %f"), NewAnimTime, StopDistRemain), false, true);
 	}
 }

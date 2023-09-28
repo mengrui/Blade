@@ -8,7 +8,10 @@ public class Blade : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "PhysicsCore", "Chaos", "InputCore", "HeadMountedDisplay", "AIModule", "MotionWarping", "PhysicsControl", "EnhancedInput" });
+        PublicDependencyModuleNames.AddRange(new string[] { 
+            "Core", "CoreUObject", "Engine", "PhysicsCore", "Chaos", "InputCore",   "EnhancedInput",
+            "HeadMountedDisplay", "AIModule", "AnimGraphRuntime", "AnimationLocomotionLibraryRuntime", 
+            "MotionWarping", "PhysicsControl" });
 
         if (Target.Type == TargetType.Editor)
         {

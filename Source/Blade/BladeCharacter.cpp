@@ -1135,9 +1135,9 @@ void ABladeCharacter::ParryProject(UPrimitiveComponent* PrimitiveComponent, clas
 
 									FTimerHandle TimerHandle2;
 									GetWorldTimerManager().SetTimer(TimerHandle2,
-										FSimpleDelegate::CreateWeakLambda(CollisionComponent, [CollisionComponent, ProjectComponent, ImpactNorm]()
+										FSimpleDelegate::CreateWeakLambda(CollisionComponent, [CollisionComponent, ProjectComponent, BounceNormal = (ParryDirection/ TimeStep - Velocity).GetSafeNormal()]()
 										{
-											ProjectComponent->Velocity = ImpactNorm * ProjectComponent->Velocity.Size();
+											ProjectComponent->Velocity = BounceNormal * ProjectComponent->Velocity.Size();
 											UKismetSystemLibrary::DrawDebugBox(CollisionComponent, CollisionComponent->GetComponentLocation(), CollisionComponent->GetCollisionShape().GetExtent(), FLinearColor::Yellow, CollisionComponent->GetComponentRotation(), 3);
 										}),
 										ProjectTime, false);

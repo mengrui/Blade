@@ -143,12 +143,18 @@ public:
 	bool IsPlayingRootMotion = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
-	UBlendSpace* StrafeMove;
+	UBlendSpace*	StrafeMove;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
-	UAnimSequence* StandIdle;
+	UAnimSequence*	StandIdle;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Shoot)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
+	TArray<UAnimSequence*>	StrafeStopRU;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
+	TArray<UAnimSequence*>	StrafeStopLU;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
 	TArray<UAnimSequence*>	TurnInplaces;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Jump)
@@ -196,11 +202,19 @@ protected:
 	UPROPERTY(BlueprintReadWrite, Category = Shoot)
 	float					TurnInplaceYawOffset = 0;
 
+	float					StopDistRemain = 0;
 	float					LastIdleYaw = 0;
+	int						DirectionIndex = 0;
 
 	UFUNCTION(BlueprintCallable, meta = (BlueprintThreadSafe))
 	void BeginIdle(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference);
 
 	UFUNCTION(BlueprintCallable, meta = (BlueprintThreadSafe))
 	void UpdateIdle(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference);
+
+	UFUNCTION(BlueprintCallable, meta = (BlueprintThreadSafe))
+	void BeginStop(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference);
+
+	UFUNCTION(BlueprintCallable, meta = (BlueprintThreadSafe))
+	void UpdateStop(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference);
 };
