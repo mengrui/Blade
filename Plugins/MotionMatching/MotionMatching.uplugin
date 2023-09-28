@@ -1,0 +1,36 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"EngineVersion": "5.3",
+	"FriendlyName": "MotionMatching",
+	"Description": "Smart MotionMatching Version",
+	"Category": "Animation",
+	"CreatedBy": "Terry Meng",
+	"CreatedByURL": "",
+	"DocsURL": "https://docs.google.com/document/d/1lyxeAnuik217JedckdZlTbgoFdxpCtn_-kN4yYHYatQ/edit?usp=sharing",
+	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/1e629cf5fe2445699e90b77e50d559a4",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": true,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "MotionMatching",
+			"Type": "Runtime",
+			"LoadingPhase": "PreDefault",
+			"PlatformAllowList": [
+				"Win64"
+			]
+		},
+		{
+			"Name": "MotionMatchingEditor",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "PreDefault",
+			"PlatformAllowList": [
+				"Win64"
+			]
+		}
+	]
+}
