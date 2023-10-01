@@ -163,10 +163,10 @@ void ABladeCharacter::SetRagdoll(bool bEnable)
 
 		if (auto AnimInst = GetAnimInstance())
 		{
-			GetWorldTimerManager().SetTimerForNextTick([AnimInst]()
+			GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(AnimInst, [AnimInst]()
 				{
 					AnimInst->bRagdoll = true;
-				});
+				}));
 		}
 	}
 	else
@@ -281,14 +281,14 @@ void ABladeCharacter::Tick(float DeltaSeconds)
 		SetBlock(bWantBlock);
 	}
 
-	//if (GetBlock())
-	//{
-	//	GetCharacterMovement()->MaxWalkSpeed = 0;
-	//}
-	//else
-	//{
-	//	GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
-	//}
+	if (IsSprint())
+	{
+		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+	}
+	else if(GetBlock())
+		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	else
+		GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
 
 	if (IsRagdoll())
 	{
@@ -390,20 +390,21 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 
 	FVector ForceFromDir = ShotFromDirection.GetSafeNormal();
 	HitNormal = FVector::ZeroVector;
-	const FVector CauserDir = (DamageCauser->GetOwner()->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+	const FVector CauserDir = (DamageCauser->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
 	EHitAnimType AnimType = EHitAnimType::StandLight;
 	const UBladeDamageType* DamageClassType = Cast<UBladeDamageType>(InDamageType);
 	const auto DamageType = DamageClassType->DamageType;
 	const float Force = DamageClassType->DamageImpulse;
+
 	if (CanBlock(CauserDir))
 	{
-		if (DamageType == EDamageType::Melee_Light)
+		if (DamageType == EDamageType::Melee_BreakBlock)
 		{
-			AnimType = EHitAnimType::Blocked;
+			AnimType = EHitAnimType::BreakBlock;
 		}
 		else
 		{
-			AnimType = EHitAnimType::BreakBlock;
+			AnimType = EHitAnimType::Blocked;
 		}
 	}
 	else if (DamageType == Melee_Light)
@@ -412,8 +413,6 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 	}
 	else if (DamageType == Melee_Heavy)
 		AnimType = EHitAnimType::StandHeavy;
-	else if (DamageType == Melee_Float)
-		AnimType = EHitAnimType::Float;
 	else if (DamageType == Melee_Knock)
 		AnimType = EHitAnimType::Knock;
 	else if (DamageType == Bullet_Light)
@@ -424,62 +423,59 @@ void ABladeCharacter::OnPointDamage(AActor* DamagedActor, float Damage,
 		SetHealth(Health - Damage);
 	}
 
+	if (Health <= 0)
+	{
+		if (DamageType != Melee_Knock)
+			AnimType = EHitAnimType::Death;
+	}
+
 	const auto& RefSkeleton = AnimInst->CurrentSkeleton->GetReferenceSkeleton();
 	const int HitBoneIndex = RefSkeleton.FindBoneIndex(BoneName);
 	const FVector HitDirInMeshSpace = GetMesh()->GetComponentTransform().InverseTransformVector(ForceFromDir);
 	float MinCost = FLT_MAX;
 	UAnimMontage* HitAnim = nullptr;
 	FVector HitAnimDirection = FVector::Zero();
-	if (Health > 0)
+	for (const auto Anim : AnimInst->Hits)
 	{
-		for (const auto Anim : AnimInst->Hits)
+		if (const auto HitData = GetHitData(Anim))
 		{
-			if (const auto HitData = GetHitData(Anim))
+			if (AnimType == HitData->HitAnimType)
 			{
-				if (AnimType == HitData->HitAnimType)
+				const int Depth = RefSkeleton.GetDepthBetweenBones(HitBoneIndex, RefSkeleton.FindBoneIndex(HitData->BoneName));
+				if (Depth >= 0)
 				{
-					const int Depth = RefSkeleton.GetDepthBetweenBones(HitBoneIndex, RefSkeleton.FindBoneIndex(HitData->BoneName));
-					if (Depth >= 0)
+					FVector AnimHitVec = HitData->Direction.GetSafeNormal();
+					float Cost = 0;
+					Cost += 1 - (AnimHitVec | HitDirInMeshSpace);
+					Cost += Depth;
+					if (Cost < MinCost)
 					{
-						FVector AnimHitVec = HitData->Direction.GetSafeNormal();
-						float Cost = 0;
-						Cost += 1 - (AnimHitVec | HitDirInMeshSpace);
-						Cost += Depth;
-						if (Cost < MinCost)
-						{
-							MinCost = Cost;
-							HitAnim = Anim;
-							HitAnimDirection = AnimHitVec;
-						}
+						MinCost = Cost;
+						HitAnim = Anim;
+						HitAnimDirection = AnimHitVec;
 					}
 				}
 			}
 		}
 	}
-	else
-	{
-		float Yaw = HitDirInMeshSpace.Rotation().Yaw;
-		Yaw += 45;
-		if (Yaw < 0)
-		{
-			Yaw += 360;
-		}
-		int DeadAnimIndex = Yaw / 90;
-		if (AnimType == EHitAnimType::StandLight && AnimInst->Deads.IsValidIndex(DeadAnimIndex))
-		{
-			HitAnim = AnimInst->Deads[DeadAnimIndex];
-			HitAnimDirection = FRotator(0, DeadAnimIndex * 90, 0).Vector();
-		}
-	}
 
 	if (HitAnim)
 	{
+		if (HitAnim->HasRootMotion())
+		{
+			FVector RootMotionDir = HitAnim->ExtractRootMotionFromTrackRange(0, HitAnim->GetPlayLength()).GetLocation().GetSafeNormal2D();
+			RootMotionDir = GetMesh()->GetComponentTransform().TransformVector(RootMotionDir);
+			FVector HitMoveDir = - CauserDir;
+			auto DeltaRot = FQuat::FindBetweenVectors(RootMotionDir, HitMoveDir);
+			SmoothTeleport(GetActorLocation(), (DeltaRot * GetActorQuat()).Rotator());
+			bMoveAble = false;
+		}
 		PlayAction(HitAnim);
 		//UKismetSystemLibrary::PrintString(this, FString::Printf(TEXT("Play HitAnimation %s"), *HitAnim->GetName()));
 	}
 	else if(bUsePhysicsAnimation)
 	{
-		if (AnimType == EHitAnimType::Float || AnimType == EHitAnimType::Knock || Health <= 0)
+		if (AnimType == EHitAnimType::Knock || Health <= 0)
 		{
 			SetRagdoll(true);
 			FVector ForceVector = FRotator(DamageClassType->ImpulsePitch, (-CauserDir).Rotation().Yaw, 0).Vector();
@@ -551,7 +547,6 @@ void ABladeCharacter::PostInitializeComponents()
 
 	//GetArrowComponent()->SetHiddenInGame(false);
 	MaxHealth = Health;
-	GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
 	for (auto& WeaponSlot : WeaponSlots)
 	{
 		if (WeaponSlot.WeaponClass)
@@ -596,13 +591,17 @@ void ABladeCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInp
 
 void ABladeCharacter::SmoothTeleport(const FVector& Location, const FRotator& Rotation, float SmoothTime)
 {
-	const FTransform PreMeshWorldTransform = GetMesh()->GetComponentTransform();
-	SetActorLocationAndRotation(Location, Rotation);
-	const FTransform AfterMeshWorldTransform = GetMesh()->GetComponentTransform();
-	const FTransform  PelvisOffset = PreMeshWorldTransform.GetRelativeTransform(AfterMeshWorldTransform);
-	GetAnimInstance()->OnSmoothTeleport(PelvisOffset, SmoothTime);
-	GetMesh()->TickAnimation(0, false);
-	GetMesh()->RefreshBoneTransforms();
+	if (auto AnimInst = GetAnimInstance())
+	{
+		const FTransform PreMeshWorldTransform = GetMesh()->GetComponentTransform();
+		SetActorLocationAndRotation(Location, Rotation);
+		const FTransform AfterMeshWorldTransform = GetMesh()->GetComponentTransform();
+		AnimInst->RootOffset = PreMeshWorldTransform.GetRelativeTransform(AfterMeshWorldTransform);
+		AnimInst->bHasRootOffset = true;
+		GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(AnimInst, [AnimInst]() { AnimInst->bHasRootOffset = false; }));
+		GetMesh()->TickAnimation(0, false);
+		GetMesh()->RefreshBoneTransforms();
+	}
 }
 
 void ABladeCharacter::PushActionCommand(const FActionCommand& Cmd)
@@ -699,14 +698,17 @@ void ABladeCharacter::Move(const FInputActionValue& Value)
 		const FVector YAxis = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 		AddMovementInput(XAxis, Input2D.X);
 		AddMovementInput(YAxis, Input2D.Y);
-		/*if (auto AnimInst = GetAnimInstance())
+
+		if (bMoveAble)
 		{
-			FAnimMontageInstance* MontageInstance = AnimInst->GetRootMotionMontageInstance();
-			if (bMoveAble && MontageInstance && !MontageInstance->IsRootMotionDisabled())
+			if (auto AnimInst = GetAnimInstance())
 			{
-				MontageInstance->PushDisableRootMotion();
+				if (auto MontageInst = AnimInst->GetRootMotionMontageInstance())
+				{
+					AnimInst->Montage_Stop(0.3, MontageInst->Montage);
+				}
 			}
-		}*/
+		}
 	}
 }
 
@@ -716,6 +718,11 @@ void ABladeCharacter::LookAt(const FInputActionValue& Value)
 
 	AddControllerYawInput(MouseDelta.X * TurnRateGamepad * GetWorld()->GetDeltaSeconds());
 	AddControllerPitchInput(MouseDelta.Y * TurnRateGamepad * GetWorld()->GetDeltaSeconds());
+}
+
+bool ABladeCharacter::IsSprint() const
+{
+	return bWantSprint && (GetCharacterMovement()->GetCurrentAcceleration() | GetActorForwardVector()) > 0.7;
 }
 
 void ABladeCharacter::PlayAction(UAnimMontage* Montage, bool bDisableRootMotion)
@@ -1024,7 +1031,7 @@ void ABladeCharacter::PlayParryAnim(UPrimitiveComponent* PrimitiveComponent, con
 					{
 						FTimerHandle TimerHandle;
 						GetWorldTimerManager().SetTimer(TimerHandle,
-							FSimpleDelegate::CreateWeakLambda(this, [this, BestParryAnim]() { PlayAction(BestParryAnim); }), DelayTime, false);
+							FTimerDelegate::CreateWeakLambda(this, [this, BestParryAnim]() { PlayAction(BestParryAnim); }), DelayTime, false);
 					}
 					else
 					{
@@ -1131,11 +1138,11 @@ void ABladeCharacter::ParryProject(UPrimitiveComponent* PrimitiveComponent, clas
 								{
 									FTimerHandle TimerHandle;
 									GetWorldTimerManager().SetTimer(TimerHandle,
-										FSimpleDelegate::CreateWeakLambda(this, [this, ParryAnim]() { PlayAction(ParryAnim); }), DelayTime, false);
+										FTimerDelegate::CreateWeakLambda(this, [this, ParryAnim]() { PlayAction(ParryAnim); }), DelayTime, false);
 
 									FTimerHandle TimerHandle2;
 									GetWorldTimerManager().SetTimer(TimerHandle2,
-										FSimpleDelegate::CreateWeakLambda(CollisionComponent, [CollisionComponent, ProjectComponent, BounceNormal = (ParryDirection/ TimeStep - Velocity).GetSafeNormal()]()
+										FTimerDelegate::CreateWeakLambda(CollisionComponent, [CollisionComponent, ProjectComponent, BounceNormal = (ParryDirection/ TimeStep - Velocity).GetSafeNormal()]()
 										{
 											ProjectComponent->Velocity = BounceNormal * ProjectComponent->Velocity.Size();
 											UKismetSystemLibrary::DrawDebugBox(CollisionComponent, CollisionComponent->GetComponentLocation(), CollisionComponent->GetCollisionShape().GetExtent(), FLinearColor::Yellow, CollisionComponent->GetComponentRotation(), 3);
@@ -1363,52 +1370,54 @@ void ABladeCharacter::Dodge()
 	}
 }
 
-void ABladeCharacter::Attack(int InputIndex)
+void ABladeCharacter::Attack(UInputAction* InputAction)
 {
 	if(auto AnimInst = GetAnimInstance())
 	{
 		if (GetCharacterMovement()->IsWalking())
 		{
-			UAnimMontage* AttackAnim = nullptr;
+			if (bMoveAble)
+			{
+				if (auto pVal = AnimInst->ActionAnimationMap.Find(InputAction))
+				{
+					PlayAction(*pVal, true);
+					return;
+				}
+				 
+			}
+
 			for (int i = 0; i < CachedCommands.Num(); i++)
 			{
-				if (CachedCommands[i].InputIndex == InputIndex)
+				if (CachedCommands[i].InputAction == InputAction)
 				{
-					AttackAnim = CachedCommands[i].Animation;
+					PlayAction(CachedCommands[i].Animation, true);
 					CachedCommands.Empty();
 					break;
 				}
 			}
-
-			if(bMoveAble && AnimInst->AttackAnimations.IsValidIndex(InputIndex) && AnimInst->AttackAnimations[InputIndex])
-			{
-				AttackAnim = AnimInst->AttackAnimations[InputIndex];
-			}
-
-			if(AttackAnim) 	
-				PlayAction(AttackAnim, true);
 		}
 	}
-}
-
-void ABladeCharacter::Block(const FInputActionValue& ActionValue)
-{
-	bWantBlock = ActionValue.Get<bool>();
 }
 
 void ABladeCharacter::SetBlock(bool bEnable)
 {
-	if (bEnable)
+	if (auto AnimInst = GetAnimInstance())
 	{
-		if (bMoveAble && !GetBlock())
+		if (bEnable)
 		{
-			GetAnimInstance()->StopAllMontages(0.2);
-			PlayAction(GetAnimInstance()->Block);
+			if (bMoveAble && !GetBlock())
+			{
+				AnimInst->StopAllMontages(0.2);
+				PlayAction(AnimInst->Block);
+			}
 		}
-	}
-	else
-	{
-		GetAnimInstance()->Montage_Play(GetAnimInstance()->StopBlock);
+		else
+		{
+			if (AnimInst->StopBlock)
+				PlayAction(AnimInst->StopBlock);
+			else
+				AnimInst->Montage_Stop(0.25, AnimInst->Block);
+		}
 	}
 }
 

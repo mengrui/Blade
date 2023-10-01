@@ -7,12 +7,6 @@ FRotator UBladeCharacterMovementComponent::ComputeOrientToMovementRotation(const
 	if (ABladeCharacter* Character =  Cast<ABladeCharacter>(PawnOwner))
 	{
 		FVector TargetVector = Character->bMoveAble? Character->GetInputVector() : Character->GetActorForwardVector();
-		const ACharacter* FacingTarget = Character->SelectedTarget;
-
-		if (FacingTarget)
-		{
-			TargetVector = (FacingTarget->GetActorLocation() - Character->GetActorLocation()).GetSafeNormal2D();
-		}
 
 		if (TargetVector.SizeSquared() < UE_KINDA_SMALL_NUMBER)
 		{

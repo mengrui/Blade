@@ -38,10 +38,11 @@ void UAnimationProcessLibrary::CopyBoneTransform(UAnimSequence* Animation, const
 
 	FMemMark Mark(FMemStack::Get());
 
-	FBoneContainer BoneContainer(RequiredBones, false, *Skeleton);
+	UE::Anim::FCurveFilterSettings CurveFilterSettings;
+	FBoneContainer BoneContainer(RequiredBones, CurveFilterSettings, *Skeleton);
 
-	const float AnimLength = Animation->GetPlayLength();
-	const float SampleInterval = Animation->GetSamplingFrameRate().AsInterval();
+	const double AnimLength = Animation->GetPlayLength();
+	const double SampleInterval = Animation->GetSamplingFrameRate().AsInterval();
 	int32 FrameNumber = Animation->GetNumberOfSampledKeys();
 
 	FCompactPose Pose;
@@ -74,8 +75,12 @@ void UAnimationProcessLibrary::CopyBoneTransform(UAnimSequence* Animation, const
 		DestTrack.RotKeys.Add(FQuat4f(DestTransform.GetRotation()));
 	}
 
-	Controller.AddBoneTrack(DestBone);
-	Controller.SetBoneTrackKeys(DestBone, DestTrack.PosKeys, DestTrack.RotKeys, DestTrack.ScaleKeys);
+	Controller.OpenBracket(FText::FromString("CopyBoneTransform"));
+	{
+		Controller.AddBoneCurve(DestBone);
+		Controller.SetBoneTrackKeys(DestBone, DestTrack.PosKeys, DestTrack.RotKeys, DestTrack.ScaleKeys);
+	}
+	Controller.CloseBracket();
 }
 
 static void GenBoneSyncMarker(UAnimSequence* Animation, const int32 BoneIndex, float FootHeightThreshold, const FName& MarkerName, const FName& SyncMarkerNotifyTrackName)

@@ -105,6 +105,12 @@ public:
 	bool bWantBlock = false;
 
 	UPROPERTY(BlueprintReadWrite)
+	bool bWantSprint = false;
+
+	UFUNCTION(BlueprintCallable)
+	bool IsSprint() const;
+
+	UPROPERTY(BlueprintReadWrite)
 	bool bParrying = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
@@ -209,10 +215,7 @@ public:
 	void Dodge();
 
 	UFUNCTION(BlueprintCallable)
-	void Attack(int Index);
-
-	UFUNCTION(BlueprintCallable)
-	void Block(const FInputActionValue& ActionValue);
+	void Attack(UInputAction* InputAction);
 
 	UFUNCTION(BlueprintCallable)
 	void SetBlock(bool bEnable);

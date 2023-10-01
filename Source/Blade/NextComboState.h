@@ -12,19 +12,19 @@ struct FActionCommand
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	int InputIndex = 0;
+	class UInputAction*	InputAction = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	UAnimMontage* Animation = nullptr;
+	UAnimMontage*	Animation = nullptr;
 
 	FActionCommand() {}
 
-	FActionCommand(int Index, UAnimMontage* Anim)
-		:InputIndex(Index), Animation(Anim) {}
+	FActionCommand(UInputAction* InAction, UAnimMontage* Anim)
+		:InputAction(InAction), Animation(Anim) {}
 
 	FORCEINLINE bool operator ==(const FActionCommand& Other) const
 	{
-		return InputIndex == Other.InputIndex && Animation == Other.Animation;
+		return InputAction == Other.InputAction && Animation == Other.Animation;
 	}
 };
 

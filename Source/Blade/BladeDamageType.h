@@ -11,7 +11,7 @@ enum EDamageType
 {
 	Melee_Light,
 	Melee_Heavy,
-	Melee_Float,
+	Melee_BreakBlock,
 	Melee_Knock,
 	Bullet_Light
 };

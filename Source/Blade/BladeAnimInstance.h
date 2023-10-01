@@ -16,11 +16,11 @@ enum EHitAnimType
 {
 	StandLight,
 	StandHeavy,
-	Float,
 	Blocked,
 	BreakBlock,
 	Knock,
 	Bullet,
+	Death,
 	None
 }; 
 
@@ -36,7 +36,7 @@ public:
 	TEnumAsByte<EHitAnimType> HitAnimType;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FName BoneName;
+	FName BoneName = TEXT("pelvis");
 };
 
 UCLASS(Blueprintable)
@@ -79,8 +79,6 @@ class BLADE_API UBladeAnimInstance : public UAnimInstance
 public:
 	UBladeAnimInstance();
 
-	void OnSmoothTeleport(const FTransform& PelvisOffset, float Time);
-
 	virtual void NativeInitializeAnimation() override;
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 
@@ -111,6 +109,9 @@ public:
 	float Speed = 0;
 
 	UPROPERTY(BlueprintReadOnly)
+	bool bSprint = false;
+
+	UPROPERTY(BlueprintReadOnly)
 	FVector2D Strafe = FVector2D::Zero();
 
 	UPROPERTY(BlueprintReadOnly)
@@ -129,12 +130,10 @@ public:
 	FTransform PelvisTransform;
 
 	UPROPERTY(BlueprintReadWrite)
-	float SmoothTeleportAlpha = 0;
-
-	float SmoothTeleportTime = 0;
+	FTransform RootOffset;
 
 	UPROPERTY(BlueprintReadWrite)
-	FTransform PelvisOffset;
+	bool bHasRootOffset = false;
 
 	UPROPERTY(BlueprintReadOnly)
 	bool IsMoveForward = true;
@@ -146,7 +145,22 @@ public:
 	UBlendSpace*	StrafeMove;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
+	UBlendSpace*	StrafeAimOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
 	UAnimSequence*	StandIdle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
+	UAnimSequence*	SprintStart;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
+	UAnimSequence*	SprintLoop;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
+	UAnimSequence*	SprintStopRU;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
+	UAnimSequence*	SprintStopLU;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Ground)
 	TArray<UAnimSequence*>	StrafeStopRU;
@@ -167,14 +181,11 @@ public:
 	UAnimSequence* Falling;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
-	TArray<UAnimMontage*>	AttackAnimations;
+	TMap<UInputAction*, UAnimMontage*>	ActionAnimationMap;
 
 	/** front 0,right 1, back 2, left 3 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
 	TArray<UAnimMontage*>	Hits;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
-	TArray<UAnimMontage*>	Deads;
 
 	/** eight Direction clockwise 0~8 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
@@ -198,9 +209,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Melee)
 	TArray<UAnimMontage*>	ParryAnimations;
 
+	UPROPERTY(BlueprintReadOnly)
+	float					ActorYaw;
+
+	UPROPERTY(BlueprintReadOnly)
+	float					StopBeginYaw = 0;
+
 protected:
-	UPROPERTY(BlueprintReadWrite, Category = Shoot)
+	UPROPERTY(BlueprintReadWrite)
 	float					TurnInplaceYawOffset = 0;
+
+	UPROPERTY(BlueprintReadWrite)
+	float					SprintYawOffset = 0;
 
 	float					StopDistRemain = 0;
 	float					LastIdleYaw = 0;

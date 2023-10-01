@@ -21,13 +21,6 @@ UBladeAnimInstance::UBladeAnimInstance()
 {
 }
 
-void UBladeAnimInstance::OnSmoothTeleport(const FTransform& InPelvisOffset, float Time)
-{
-	SmoothTeleportTime = Time;
-	SmoothTeleportAlpha = 1;
-	PelvisOffset = InPelvisOffset;
-}
-
 void UBladeAnimInstance::NativeInitializeAnimation()
 {
 	Super::NativeInitializeAnimation();
@@ -40,6 +33,7 @@ void UBladeAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	ABladeCharacter* Character = Cast<ABladeCharacter>(GetOwningActor());
 	if (!Character) return;
 
+	ActorYaw = Character->GetActorRotation().Yaw;
 	bRagdoll = Character->bRagdoll;
 	bFaceUp = GetOwningComponent()->GetBoneAxis(PelvisBone, EAxis::Y).Z > 0;
 	FTransform ActorTransform = Character->GetActorTransform();
@@ -60,14 +54,12 @@ void UBladeAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	IsMoveForward = (LocalAccelVector | FVector(1, 0, 0)) > 0.99f;
 	IsPlayingRootMotion = GetRootMotionMontageInstance() && !GetRootMotionMontageInstance()->IsRootMotionDisabled();
 	bInputMove = !Acceleration.IsZero() && !IsPlayingRootMotion;
-	if (SmoothTeleportTime > 0)
-	{
-		SmoothTeleportAlpha -= DeltaSeconds / SmoothTeleportTime;
-	}
-	else
-	{
-		SmoothTeleportAlpha = 0;
-	}
+	bSprint = Character->IsSprint()&& Speed > Character->RunSpeed + 10;
+	SprintYawOffset = FMath::ClampAngle(LocalVelDir.Rotation().Yaw, -45, 45);
+
+	FVector AimDir = FRotationMatrix::MakeFromX(RootTransform.GetUnitAxis(EAxis::Y)).InverseTransformVector(Character->GetViewRotation().Vector());
+	AimOffset.X = AimDir.Rotation().Yaw;
+	AimOffset.Y = AimDir.Rotation().Pitch;
 }
 
 void UBladeAnimInstance::StopMontage(float InBlendOutTime, const FName& SlotNodeName)
@@ -109,13 +101,12 @@ void UBladeAnimInstance::StopMontage(float InBlendOutTime, const FName& SlotNode
 
 void UBladeAnimInstance::BeginIdle(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference)
 {
-	LastIdleYaw = GetOwningActor()->GetActorRotation().Yaw;
+	LastIdleYaw = ActorYaw;
 	TurnInplaceYawOffset = 0;
 }
 
 void UBladeAnimInstance::UpdateIdle(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference)
 {
-	float ActorYaw = GetOwningActor()->GetActorRotation().Yaw;
 	float DeltaYaw = FMath::FindDeltaAngleDegrees(LastIdleYaw, ActorYaw);
 	TurnInplaceYawOffset -= DeltaYaw;
 	LastIdleYaw = ActorYaw;
@@ -131,11 +122,11 @@ void UBladeAnimInstance::BeginTurnInplace(const FAnimUpdateContext& UpdateContex
 			{
 				SequencePlayer->SetSequence(TurnInplaces[0]);
 			}
-			else if (TurnInplaceYawOffset > 60)
+			else if (TurnInplaceYawOffset >= 0)
 			{
 				SequencePlayer->SetSequence(TurnInplaces[1]);
 			}
-			else if (TurnInplaceYawOffset < -60)
+			else if (TurnInplaceYawOffset < 0)
 			{
 				SequencePlayer->SetSequence(TurnInplaces[2]);
 			}
@@ -165,16 +156,26 @@ void UBladeAnimInstance::UpdateTurnInplace(const FAnimUpdateContext& UpdateConte
 	}
 }
 
+#pragma optimize("", off)
 void UBladeAnimInstance::BeginStop(const FAnimUpdateContext& UpdateContext, const FAnimNodeReference& AnimNodeReference)
 {
 	FAnimNode_SequenceEvaluator* SequenceEvaluator = AnimNodeReference.GetAnimNodePtr<FAnimNode_SequenceEvaluator>();
 	if (SequenceEvaluator)
 	{
-		bool bLeftFootUp = GetOwningComponent()->GetBoneLocation(TEXT("foot_l")).Z > GetOwningComponent()->GetBoneLocation(TEXT("foot_r")).Z;
-		const auto& StopAnims = bLeftFootUp? StrafeStopLU : StrafeStopRU;
-		if (StopAnims.IsValidIndex(DirectionIndex))
+		StopBeginYaw = GetOwningActor()->GetActorRotation().Yaw;
+		FMarkerSyncAnimPosition SyncWalkPos = GetSyncGroupPosition(TEXT("walk"));
+		bool bLeftFootUp = SyncWalkPos.NextMarkerName == TEXT("L");
+		if (bSprint)
 		{
-			SequenceEvaluator->SetSequence(StopAnims[DirectionIndex]);
+			SequenceEvaluator->SetSequence(bLeftFootUp? SprintStopLU : SprintStopRU);
+		}
+		else
+		{
+			const auto& StopAnims = bLeftFootUp ? StrafeStopLU : StrafeStopRU;
+			if (StopAnims.IsValidIndex(DirectionIndex))
+			{
+				SequenceEvaluator->SetSequence(StopAnims[DirectionIndex]);
+			}
 		}
 
 		SequenceEvaluator->SetExplicitTime(0);
@@ -205,22 +206,22 @@ void UBladeAnimInstance::UpdateStop(const FAnimUpdateContext& UpdateContext, con
 		float DeltaSeconds = UpdateContext.GetContext()->GetDeltaTime();
 		float ExplicitTime = SequenceEvaluator->GetExplicitTime();
 		float NewAnimTime = ExplicitTime;
-		StopDistRemain = FMath::Max(StopDistRemain - Speed * DeltaSeconds, 0);
-		if (Speed == 0 || StopDistRemain == 0)
-			NewAnimTime += DeltaSeconds;
+		if (Speed > 0)
+			StopDistRemain = FMath::Max(StopDistRemain - Speed * DeltaSeconds, 0);
 		else
+			StopDistRemain = 0;
+
+		if (StopDistRemain > 0)
 		{
 			float PredictedStopDist = StopDistRemain;
 
 			float LastTime = 0;
-			float LastDist = 0;
 			FVector AnimStopRootPosition = StopAnim->ExtractRootMotionFromRange(0, StopAnim->GetPlayLength()).GetLocation();
+			float LastDist = AnimStopRootPosition.Size();
 			for (float SampleTime = 0; SampleTime <= StopAnim->GetPlayLength(); SampleTime += 1.f / 30)
 			{
 				FVector CurRootPos = StopAnim->ExtractRootMotionFromRange(0, SampleTime).GetLocation();
 				float CurDist = FVector::Dist2D(AnimStopRootPosition, CurRootPos);
-				if (SampleTime == 0)
-					LastDist = CurDist;
 
 				if (CurDist <= PredictedStopDist)
 				{
@@ -238,11 +239,13 @@ void UBladeAnimInstance::UpdateStop(const FAnimUpdateContext& UpdateContext, con
 				LastDist = CurDist;
 			}
 		}
+		else
+			NewAnimTime += DeltaSeconds;
 
-		//if (ExplicitTime != 0)
-		//	NewAnimTime = FMath::Clamp(NewAnimTime, ExplicitTime + 0.7 * DeltaSeconds, ExplicitTime + DeltaSeconds * 2);
-
+		if(ExplicitTime > 0)
+			NewAnimTime = FMath::Clamp(NewAnimTime, ExplicitTime + DeltaSeconds * 0.7, ExplicitTime + DeltaSeconds * 1.3);
 		SequenceEvaluator->SetExplicitTime(NewAnimTime);
-		//UKismetSystemLibrary::PrintString(GetOwningActor(), FString::Printf(TEXT("StopAnimTime: %f  StopDistRemain: %f"), NewAnimTime, StopDistRemain), false, true);
+		//UKismetSystemLibrary::PrintString(GetOwningActor(), FString::Printf(TEXT("StopAnimTime: %f  StopDistRemain: %f"), NewAnimTime, StopDistRemain), true, false);
 	}
 }
+#pragma optimize("", on)
