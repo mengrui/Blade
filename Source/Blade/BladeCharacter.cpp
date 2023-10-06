@@ -29,6 +29,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/SkeletalMeshSocket.h"
 #include "TrackCollisionComponent.h"
+#include "BladeAIControllerBase.h"
 
 //////////////////////////////////////////////////////////////////////////
 // ABladeCharacter
@@ -598,9 +599,10 @@ void ABladeCharacter::SmoothTeleport(const FVector& Location, const FRotator& Ro
 		const FTransform AfterMeshWorldTransform = GetMesh()->GetComponentTransform();
 		AnimInst->RootOffset = PreMeshWorldTransform.GetRelativeTransform(AfterMeshWorldTransform);
 		AnimInst->bHasRootOffset = true;
-		GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(AnimInst, [AnimInst]() { AnimInst->bHasRootOffset = false; }));
-		GetMesh()->TickAnimation(0, false);
+		AnimInst->SmoothTeleportBlendTime = SmoothTime;
+		GetMesh()->TickPose(0, false);
 		GetMesh()->RefreshBoneTransforms();
+		GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(AnimInst, [AnimInst]() { AnimInst->bHasRootOffset = false; }));
 	}
 }
 
@@ -723,6 +725,15 @@ void ABladeCharacter::LookAt(const FInputActionValue& Value)
 bool ABladeCharacter::IsSprint() const
 {
 	return bWantSprint && (GetCharacterMovement()->GetCurrentAcceleration() | GetActorForwardVector()) > 0.7;
+}
+
+void ABladeCharacter::OnDead_Implementation()
+{
+	if (auto AIController = GetController<AAIController>())
+	{
+		AIController->UnPossess();
+		AIController->Destroy();
+	}
 }
 
 void ABladeCharacter::PlayAction(UAnimMontage* Montage, bool bDisableRootMotion)
@@ -1352,17 +1363,16 @@ FTransform ABladeCharacter::FindMotionWarpingTargetTransform(const ACharacter* A
 
 void ABladeCharacter::Dodge()
 {
-	if ((bMoveAble) && GetAnimInstance()->Dodges.Num() > 0)
+	if (bMoveAble && GetAnimInstance()->Dodges.Num() > 0)
 	{
-		const FVector LocalDir = GetActorTransform().InverseTransformVector(GetInputVector().GetSafeNormal2D());
-		float AngleBetweenDirection = 360.0f / (float)GetAnimInstance()->Dodges.Num();
-		const int DirectionIndex = FRotator::ClampAxis(LocalDir.Rotation().Yaw + AngleBetweenDirection*0.5) / AngleBetweenDirection;
+		const float InputYaw = GetActorTransform().InverseTransformVector(GetInputVector()).Rotation().Yaw;
+		const int DirectionIndex = FMath::Abs(InputYaw) > 120? 2 : (FMath::Abs(InputYaw) < 60 ? 0 : InputYaw > 0? 1 : 3);
 
 		if (const auto AnimSeq = GetAnimInstance()->Dodges[DirectionIndex])
 		{
-			FTransform RootTrans = AnimSeq->ExtractRootMotionFromRange(0, AnimSeq->GetPlayLength());
-			RootTrans = ConvertLocalRootMotionToWorld(RootTrans, GetMesh()->GetRelativeTransform());
-			const auto DeltaRot = FQuat::FindBetween(RootTrans.GetLocation().GetSafeNormal2D(), LocalDir);
+			FVector RootTrans = AnimSeq->ExtractRootMotionFromTrackRange(0, AnimSeq->GetPlayLength()).GetLocation();
+			RootTrans = GetMesh()->GetComponentTransform().TransformVector(RootTrans);
+			const auto DeltaRot = FQuat::FindBetween(RootTrans.GetSafeNormal2D(), GetInputVector());
 			SmoothTeleport(GetActorLocation(), (DeltaRot * GetActorQuat()).Rotator());
 			bMoveAble = false;
 			PlayAction(AnimSeq);

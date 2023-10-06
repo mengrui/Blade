@@ -116,7 +116,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	float CacheInputTime = 0.25f;
 
-	UFUNCTION(BlueprintImplementableEvent)
+	UFUNCTION(BlueprintNativeEvent)
 	void OnDead();
 
 	UFUNCTION(BlueprintCallable)

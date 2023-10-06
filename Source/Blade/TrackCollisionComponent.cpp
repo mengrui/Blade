@@ -8,35 +8,33 @@
 UTrackCollisionComponent::UTrackCollisionComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bTickEvenWhenPaused = false;
 	PrimaryComponentTick.TickGroup = TG_PrePhysics;
 }
 
 void UTrackCollisionComponent::StartTrace()
 {
-	bTrace = true;
+	SetComponentTickEnabled(true);
 	LastTransform = GetComponentTransform();
 }
 
 void UTrackCollisionComponent::EndTrace()
 {
-	bTrace = false;
+	SetComponentTickEnabled(false);
 	IgnoreComponents.Empty();
 }
 
-void UTrackCollisionComponent::OnUpdateTransform(EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport)
+void UTrackCollisionComponent::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
-	Super::OnUpdateTransform(UpdateTransformFlags, Teleport);
-
-	if (!bTrace) return;
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	TArray<AActor*> IgnoreActors;
 	IgnoreActors.Add(GetOwner()->GetOwner());
 	const FVector ScaledExtent = GetScaledBoxExtent();
 	int NumSection = ScaledExtent.X * 2 / SectionLength;
 	const FVector Extent = GetUnscaledBoxExtent();
-	const FVector StepVec = FVector(Extent.X*2, 0, 0) / static_cast<float>(NumSection);
+	const FVector StepVec = FVector(Extent.X * 2, 0, 0) / static_cast<float>(NumSection);
 	for (int32 i = 0; i < NumSection; i++)
 	{
 		const FVector LocalPos = FVector(-Extent.X, 0, 0) + StepVec * (0.5f + i);
@@ -56,7 +54,7 @@ void UTrackCollisionComponent::OnUpdateTransform(EUpdateTransformFlags UpdateTra
 			{
 				if (!IgnoreComponents.Contains(Hits[j].GetComponent()))
 				{
-					OnComponentHit.Broadcast(this, Hits[j].GetActor(), Hits[j].GetComponent(),(Hits[j].TraceEnd - Hits[j].TraceStart).GetSafeNormal(), Hits[j]);
+					OnComponentHit.Broadcast(this, Hits[j].GetActor(), Hits[j].GetComponent(), (Hits[j].TraceEnd - Hits[j].TraceStart).GetSafeNormal(), Hits[j]);
 					Hits[j].GetComponent()->OnComponentHit.Broadcast(Hits[j].GetComponent(), GetOwner(), this, (Hits[j].TraceEnd - Hits[j].TraceStart).GetSafeNormal(), Hits[j]);
 					IgnoreComponents.Add(Hits[j].GetComponent());
 				}

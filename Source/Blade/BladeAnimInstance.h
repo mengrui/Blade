@@ -135,6 +135,9 @@ public:
 	UPROPERTY(BlueprintReadWrite)
 	bool bHasRootOffset = false;
 
+	UPROPERTY(BlueprintReadWrite)
+	float SmoothTeleportBlendTime = 0.2f;
+
 	UPROPERTY(BlueprintReadOnly)
 	bool IsMoveForward = true;
 

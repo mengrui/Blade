@@ -26,7 +26,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TrackCollisionComponent)
 	TArray<TEnumAsByte<EObjectTypeQuery> >  TraceChannels;
 private:
-	bool bTrace = false;
 	FTransform LastTransform;
 
 public:
@@ -35,13 +34,11 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Trace")
 	void EndTrace();
-
-	UFUNCTION(BlueprintPure, Category = "Trace")
-	bool IsTracing() const { return bTrace;  }
 	
-	//virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	//virtual void BeginPlay() override;
+	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 protected:
-	virtual void OnUpdateTransform(EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport = ETeleportType::None) override;
+	//virtual void OnUpdateTransform(EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport = ETeleportType::None) override;
 
 	UPROPERTY(Transient)
 	TArray<UPrimitiveComponent*> IgnoreComponents;

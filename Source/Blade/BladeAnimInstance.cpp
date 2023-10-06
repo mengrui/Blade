@@ -49,7 +49,7 @@ void UBladeAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	FVector LocalVelDir = ActorTransform.InverseTransformVector(Velocity).GetSafeNormal2D();
 	DirectionIndex = FRotator::ClampAxis(LocalVelDir.ToOrientationRotator().Yaw + 45) / 90;
 	LocalVelDir = LocalVelDir /FMath::Max(FMath::Abs(LocalVelDir.X), FMath::Abs(LocalVelDir.Y));
-	LocalVelDir *= Speed / MovementComponent->GetMaxSpeed();
+	LocalVelDir *= Speed / Character->RunSpeed;
 	Strafe = FVector2D(LocalVelDir);
 	IsMoveForward = (LocalAccelVector | FVector(1, 0, 0)) > 0.99f;
 	IsPlayingRootMotion = GetRootMotionMontageInstance() && !GetRootMotionMontageInstance()->IsRootMotionDisabled();
