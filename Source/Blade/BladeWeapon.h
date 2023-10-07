@@ -6,6 +6,7 @@
 #include "Components/BoxComponent.h"
 #include "BladeAnimInstance.h"
 #include "GameFramework/Actor.h"
+#include "PhysicalMaterials/PhysicalMaterial.h"
 #include "BladeWeapon.generated.h"
 
 UCLASS()
@@ -46,6 +47,9 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, Transient)
 	TSubclassOf<UCameraShakeBase> HitCameraShake;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TMap<TEnumAsByte<EPhysicalSurface>, class UFXSystemAsset*>		HitEffectMap;
 
 protected:
 	UPROPERTY(Transient)

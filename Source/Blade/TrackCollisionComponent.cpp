@@ -9,8 +9,11 @@ UTrackCollisionComponent::UTrackCollisionComponent(const FObjectInitializer& Obj
 	: Super(ObjectInitializer)
 {
 	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
 	PrimaryComponentTick.bTickEvenWhenPaused = false;
-	PrimaryComponentTick.TickGroup = TG_PrePhysics;
+	SetCollisionObjectType(ECC_PhysicsBody);
+	SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	SetCollisionResponseToAllChannels(ECR_Ignore);
 }
 
 void UTrackCollisionComponent::StartTrace()
@@ -32,7 +35,7 @@ void UTrackCollisionComponent::TickComponent(float DeltaTime, enum ELevelTick Ti
 	TArray<AActor*> IgnoreActors;
 	IgnoreActors.Add(GetOwner()->GetOwner());
 	const FVector ScaledExtent = GetScaledBoxExtent();
-	int NumSection = ScaledExtent.X * 2 / SectionLength;
+	int NumSection = FMath::CeilToInt(ScaledExtent.X * 2 / SectionLength);
 	const FVector Extent = GetUnscaledBoxExtent();
 	const FVector StepVec = FVector(Extent.X * 2, 0, 0) / static_cast<float>(NumSection);
 	for (int32 i = 0; i < NumSection; i++)
@@ -54,7 +57,9 @@ void UTrackCollisionComponent::TickComponent(float DeltaTime, enum ELevelTick Ti
 			{
 				if (!IgnoreComponents.Contains(Hits[j].GetComponent()))
 				{
-					OnComponentHit.Broadcast(this, Hits[j].GetActor(), Hits[j].GetComponent(), (Hits[j].TraceEnd - Hits[j].TraceStart).GetSafeNormal(), Hits[j]);
+					const FVector NormalImpulse = (Hits[j].TraceEnd - Hits[j].TraceStart).GetSafeNormal();
+					GetOwner()->OnActorHit.Broadcast(GetOwner(), Hits[j].GetActor(), NormalImpulse, Hits[j]);
+					OnComponentHit.Broadcast(this, Hits[j].GetActor(), Hits[j].GetComponent(), NormalImpulse, Hits[j]);
 					Hits[j].GetComponent()->OnComponentHit.Broadcast(Hits[j].GetComponent(), GetOwner(), this, (Hits[j].TraceEnd - Hits[j].TraceStart).GetSafeNormal(), Hits[j]);
 					IgnoreComponents.Add(Hits[j].GetComponent());
 				}

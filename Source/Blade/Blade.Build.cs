@@ -11,7 +11,7 @@ public class Blade : ModuleRules
         PublicDependencyModuleNames.AddRange(new string[] { 
             "Core", "CoreUObject", "Engine", "PhysicsCore", "Chaos", "InputCore",   "EnhancedInput",
             "HeadMountedDisplay", "AIModule", "AnimGraphRuntime", "AnimationLocomotionLibraryRuntime", 
-            "MotionWarping", "PhysicsControl" });
+            "MotionWarping", "PhysicsControl", "Niagara" });
 
         if (Target.Type == TargetType.Editor)
         {

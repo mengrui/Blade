@@ -237,6 +237,13 @@ FName ABladeCharacter::GetWeaponSocketName(ABladeWeapon* Weapon)
 
 void ABladeCharacter::Destroyed()
 {
+	for (int i = 0; i < WeaponSlots.Num(); i++)
+	{
+		if (WeaponSlots[i].Weapon)
+			WeaponSlots[i].Weapon->Destroy();
+
+		WeaponSlots[i].Weapon = nullptr;
+	}
 }
 
 float SmoothTo(float Src, float Dst, float Val)
