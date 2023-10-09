@@ -741,6 +741,10 @@ void ABladeCharacter::OnDead_Implementation()
 		AIController->UnPossess();
 		AIController->Destroy();
 	}
+	else if (Controller)
+	{
+		Controller->UnPossess();
+	}
 }
 
 void ABladeCharacter::PlayAction(UAnimMontage* Montage, bool bDisableRootMotion)
@@ -827,7 +831,7 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, int WeaponI
 			float EndTime = Animation->GetPlayLength();
 			for (auto& NotifieRef : NotifyContext.ActiveNotifies)
 			{
-				if (NotifieRef.GetNotify()->NotifyName.ToString().Contains(TEXT("AttackState")))
+				if (NotifieRef.GetNotify()->NotifyStateClass->IsA<UAttackNotifyState>())
 				{
 					StartTime = NotifieRef.GetNotify()->GetTriggerTime();
 					EndTime = NotifieRef.GetNotify()->GetEndTriggerTime();
@@ -901,9 +905,96 @@ void ABladeCharacter::PredictAttackHit(UAnimSequenceBase* Animation, int WeaponI
 	}
 }
 
-void ABladeCharacter::PlayParryAnim(UPrimitiveComponent* PrimitiveComponent, const TArray<FTransform>& AttackShapeTracks, float StartTime, bool bSweep)
+bool ABladeCharacter::ParryMelee(ABladeCharacter* Attacker)
 {
-	if (AttackShapeTracks.IsEmpty() || !PrimitiveComponent) return;
+	if (Attacker && Attacker->GetAnimInstance())
+	{
+		if (auto MontageInst = Attacker->GetAnimInstance()->GetActiveMontageInstance())
+		{
+			const float TimeStep = 1.0 / 60;
+			float CurrentPlayPosition = MontageInst->GetPosition();
+			auto Animation = MontageInst->Montage;
+			FAnimNotifyContext NotifyContext;
+			Animation->GetAnimNotifies(0, Animation->GetPlayLength(), NotifyContext);
+			float StartTime = 0;
+			float EndTime = 0;
+			int AttackWeaponIndex = INDEX_NONE;
+			for (auto& NotifieRef : NotifyContext.ActiveNotifies)
+			{
+				if (UAttackNotifyState* AttackState = Cast<UAttackNotifyState>(NotifieRef.GetNotify()->NotifyStateClass))
+				{
+					if (NotifieRef.GetNotify()->GetEndTriggerTime() > CurrentPlayPosition)
+					{
+						StartTime = FMath::Max(CurrentPlayPosition, NotifieRef.GetNotify()->GetTriggerTime());
+						EndTime = NotifieRef.GetNotify()->GetEndTriggerTime();
+						AttackWeaponIndex = AttackState->WeaponIndex;
+						break;
+					}
+				}
+			}
+
+			if (ABladeWeapon* AttackWeapon = Attacker->GetWeapon(AttackWeaponIndex))
+			{
+				TArray<UTrackCollisionComponent*> AttackCollisionComponents;
+				AttackWeapon->GetComponents(AttackCollisionComponents);
+				for (auto AttackCollision : AttackCollisionComponents)
+				{
+					int32 BoneIndex = Attacker->GetWeaponBoneIndex(AttackWeaponIndex);
+					TArray<FTransform> AttackWeaponTransforms;
+					int StartFrame = FMath::RoundToInt(StartTime / TimeStep);
+					int EndFrame = FMath::RoundToInt(EndTime / TimeStep);
+					FTransform SocketLocalTransform = Attacker->GetMesh()->GetSocketTransform(Attacker->WeaponSlots[AttackWeaponIndex].AttachSocketName).GetRelativeTransform(Attacker->GetMesh()->GetBoneTransform(BoneIndex));
+					FTransform RootTransform = Attacker->GetMesh()->GetBoneTransform(0);
+					FTransform RefTransform = GetAnimationBoneTransform(Animation, 0, 0);
+					FTransform AnimToWorld = RefTransform.Inverse() * RootTransform;
+					TArray<FTransform> BoneTransforms;
+					GetBoneTrackData(Animation, Attacker->GetMesh()->GetBoneName(BoneIndex), BoneTransforms);
+
+					for (int i = StartFrame; i <= EndFrame; i++)
+					{
+						auto HandBoneTransform = BoneTransforms.IsValidIndex(i) ? BoneTransforms[i] : GetAnimationBoneTransform(Animation, BoneIndex, i * TimeStep);
+						AttackWeaponTransforms.Add(SocketLocalTransform * HandBoneTransform * AnimToWorld);
+					}
+
+					FTransform LastTransform = AttackWeaponTransforms[0];
+
+					bool bSweepAttack = false;
+					for (int i = 1; i < AttackWeaponTransforms.Num(); i++)
+					{
+						FTransform CurrentTransform = AttackWeaponTransforms[i];
+						TArray<FHitResult> Hits;
+						AttackWeapon->SweepTraceCharacter(Hits, LastTransform, CurrentTransform);
+						for (const auto& Hit : Hits)
+						{
+							if (Hit.GetActor() == this)
+							{
+								//Ch->NotifyAttack(Hit, SampleTime - StartTime);
+								FVector LastPosInLocal = (AttackCollision->GetRelativeTransform() * LastTransform).GetRelativeTransform(AttackCollision->GetRelativeTransform() * CurrentTransform).GetLocation();
+								bSweepAttack = !LastPosInLocal.IsNearlyZero() && FMath::Abs(LastPosInLocal.GetSafeNormal().X) < 0.5f;
+								TArray<FTransform> AttackCollisionTransforms;
+								for (auto& WeaponTransform : AttackWeaponTransforms)
+								{
+									AttackCollisionTransforms.Add(AttackCollision->GetRelativeTransform() * WeaponTransform);
+								}
+
+								PlayParryAnim(AttackCollision, AttackCollisionTransforms, StartFrame * TimeStep - CurrentPlayPosition, bSweepAttack);
+								return true;
+							}
+						}
+
+						LastTransform = CurrentTransform;
+					}
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
+bool ABladeCharacter::PlayParryAnim(UPrimitiveComponent* PrimitiveComponent, const TArray<FTransform>& AttackShapeTracks, float StartTime, bool bSweep)
+{
+	if (AttackShapeTracks.IsEmpty() || !PrimitiveComponent) return false;
 
 	if (auto AnimInst = GetAnimInstance())
 	{
@@ -1058,13 +1149,15 @@ void ABladeCharacter::PlayParryAnim(UPrimitiveComponent* PrimitiveComponent, con
 
 					UKismetSystemLibrary::DrawDebugBox(this, ParryEndTransform.GetLocation(), ParryedShape.GetExtent(), FLinearColor::Green, ParryEndTransform.Rotator(), 3);
 					UKismetSystemLibrary::DrawDebugBox(this, AttackShapeTransform.GetLocation(), AttackShape.GetExtent(), FLinearColor::Red, AttackShapeTransform.Rotator(), 3);
-					return;
+					return true;
 				}
 
 				LastAttackShapeTransform = AttackShapeTransform;
 			}
 		}
 	}
+
+	return false;
 }
 
 #pragma optimize("", off)

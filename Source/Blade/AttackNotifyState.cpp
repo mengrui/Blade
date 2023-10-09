@@ -16,10 +16,6 @@ void UAttackNotifyState::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequ
 			Character->WeaponSlots[WeaponIndex].Weapon->SetDamageType(DamageType);
 			Character->WeaponSlots[WeaponIndex].Weapon->HitCameraShake = HitCameraShake;
 			Character->WeaponSlots[WeaponIndex].Weapon->HitPlayRateCurve = HitPlayRateCurve;
-			float StartTime = EventReference.GetNotify()->GetTriggerTime();
-			float EndTime = EventReference.GetNotify()->GetEndTriggerTime();
-			/*Character->PredictAttackHit(Animation, StartTime, EndTime,	WeaponIndex);*/
-			//Character->DebugDrawWeaponTrack(Animation, StartTime, EndTime, WeaponIndex);
 		}
 	}
 }

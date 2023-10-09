@@ -138,7 +138,10 @@ public:
 	void PredictAttackHit(UAnimSequenceBase* Animation, int WeaponIndex) const;
 
 	UFUNCTION(BlueprintCallable)
-	void PlayParryAnim(UPrimitiveComponent* PrimitiveComponent,const TArray<FTransform>& ShapeTracks, float StartTime, bool bSweep);
+	bool ParryMelee(ABladeCharacter* Attacker);
+
+	UFUNCTION(BlueprintCallable)
+	bool PlayParryAnim(UPrimitiveComponent* PrimitiveComponent,const TArray<FTransform>& ShapeTracks, float StartTime, bool bSweep);
 
 	UFUNCTION(BlueprintCallable)
 	void ParryProject(UPrimitiveComponent* PrimitiveComponent,class UProjectileMovementComponent* ProjectComponent);
